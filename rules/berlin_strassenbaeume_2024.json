@@ -1,0 +1,99 @@
+{
+  "id": "berlin_strassenbaeume_2024",
+  "name": "Berlin street-tree planting standard (09/2024), clearances",
+  "jurisdiction": "Berlin",
+  "source": {
+    "title": "Pflanzung von Straßenbäumen – Standard für Berlin (Stand 09/2024), Abschnitt 5.2 Abstände",
+    "publisher": "Senatsverwaltung für Mobilität, Verkehr, Klimaschutz und Umwelt (SenMVKU), Berlin",
+    "url": "https://www.berlin.de/sen/uvk/natur-und-gruen/stadtgruen/stadtbaeume/",
+    "date": "2024-09",
+    "licence": "public document"
+  },
+  "notes": "Three distances (0.5 m carriageway, 0.25 m cycle path, 1.5 m crown to building) were verified against the standard on 2026-09-07. Rules marked assumption=true are editable planning defaults added for this tool and are NOT part of the standard.",
+  "rules": [
+    {
+      "id": "carriageway_edge",
+      "label": "Trunk to carriageway edge",
+      "subject": "trunk",
+      "reference": "carriageway",
+      "min_distance_m": 0.5,
+      "mode": "must",
+      "source_ref": "Abschnitt 5.2",
+      "quote": "Abstand Fahrbahnrand zu Stammmitte mindestens 0,50 m",
+      "description": "Minimum distance from the carriageway edge to the trunk centre.",
+      "assumption": false
+    },
+    {
+      "id": "cycleway",
+      "label": "Trunk to cycle path",
+      "subject": "trunk",
+      "reference": "cycleway",
+      "min_distance_m": 0.25,
+      "mode": "should",
+      "source_ref": "Abschnitt 5.2",
+      "quote": "Abstand Radweg zu Stamm möglichst 0,25 m",
+      "description": "Recommended distance from a cycle path edge to the trunk.",
+      "assumption": false
+    },
+    {
+      "id": "building_crown",
+      "label": "Mature crown to building",
+      "subject": "mature_crown",
+      "reference": "building",
+      "min_distance_m": 1.5,
+      "mode": "should",
+      "source_ref": "Abschnitt 5.2",
+      "quote": "Abstand ausgewachsene Krone zu mehrgeschossigen Gebäuden möglichst 1,50 m",
+      "description": "Recommended distance between the edge of the mature crown and multi-storey building fronts. Measured as trunk-to-building distance minus the mature crown radius.",
+      "assumption": false
+    },
+    {
+      "id": "plantable_surface",
+      "label": "Trunk on plantable surface",
+      "subject": "trunk",
+      "reference": "plantable_surface",
+      "min_distance_m": null,
+      "mode": "must",
+      "source_ref": null,
+      "quote": null,
+      "description": "The trunk must stand on a sidewalk or verge, not on the carriageway or inside a building footprint.",
+      "assumption": true
+    },
+    {
+      "id": "existing_tree",
+      "label": "Trunk to existing tree",
+      "subject": "trunk",
+      "reference": "existing_tree",
+      "min_distance_m": 5.0,
+      "mode": "should",
+      "source_ref": null,
+      "quote": null,
+      "description": "Planning default so new crowns do not grow into existing ones. Editable; not from the standard.",
+      "assumption": true
+    },
+    {
+      "id": "junction",
+      "label": "Trunk to junction (sight line)",
+      "subject": "trunk",
+      "reference": "junction",
+      "min_distance_m": 10.0,
+      "mode": "should",
+      "source_ref": null,
+      "quote": null,
+      "description": "Keeps sight triangles at junctions free. Planning default; the real value depends on the junction design.",
+      "assumption": true
+    },
+    {
+      "id": "sidewalk_passage",
+      "label": "Remaining sidewalk passage",
+      "subject": "pit",
+      "reference": "sidewalk_remaining_width",
+      "min_distance_m": 1.5,
+      "mode": "should",
+      "source_ref": null,
+      "quote": null,
+      "description": "Sidewalk width remaining beside the tree pit. Planning default for barrier-free passage; not from the standard.",
+      "assumption": true
+    }
+  ]
+}

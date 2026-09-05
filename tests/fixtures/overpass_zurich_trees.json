@@ -1,0 +1,861 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-09-08T03:03:04Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 737147039,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 737147052,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985894,
+  "tags": {
+    "denotation": "avenue",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985898,
+  "tags": {
+    "denotation": "avenue",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985903,
+  "tags": {
+    "denotation": "avenue",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985907,
+  "tags": {
+    "denotation": "avenue",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985910,
+  "tags": {
+    "denotation": "avenue",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985914,
+  "tags": {
+    "denotation": "avenue",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985917,
+  "tags": {
+    "denotation": "avenue",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985921,
+  "tags": {
+    "denotation": "avenue",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985925,
+  "tags": {
+    "denotation": "avenue",
+    "genus": "Platanus",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985928,
+  "tags": {
+    "denotation": "urban",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985932,
+  "tags": {
+    "denotation": "urban",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985935,
+  "tags": {
+    "denotation": "urban",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2583985938,
+  "tags": {
+    "denotation": "urban",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2956820481,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2956820487,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 2956820492,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 3648465482,
+  "tags": {
+    "denotation": "street",
+    "height": "11",
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Liriodendron tulipifera"
+  }
+},
+{
+  "type": "node",
+  "id": 3648465502,
+  "tags": {
+    "height": "11",
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Liriodendron tulipifera"
+  }
+},
+{
+  "type": "node",
+  "id": 3648465519,
+  "tags": {
+    "denotation": "street",
+    "height": "10",
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Liriodendron tulipifera"
+  }
+},
+{
+  "type": "node",
+  "id": 6877539528,
+  "tags": {
+    "denotation": "avenue",
+    "genus": "Platanus",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 9893512502,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 9893512503,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 9893512504,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 10900421300,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 10900421301,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 10900421302,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 10900421303,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 10900421304,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 10900421413,
+  "tags": {
+    "denotation": "avenue",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112285,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112286,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112287,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112288,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112289,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112290,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112291,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112292,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112293,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112294,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112295,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112296,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112297,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11822112298,
+  "tags": {
+    "denotation": "avenue",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286393,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286394,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286395,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286396,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286397,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286398,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286399,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286400,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286401,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286402,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286403,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286404,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286405,
+  "tags": {
+    "diameter_crown": "5",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Aesculus x carnea \"Briotii\"",
+    "start_date": "2012",
+    "tree:ref": "AU-4680"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286406,
+  "tags": {
+    "diameter_crown": "13",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Platanus x hispanica",
+    "tree:ref": "AU-686"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286407,
+  "tags": {
+    "diameter_crown": "8",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Platanus x hispanica",
+    "tree:ref": "AU-687"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286408,
+  "tags": {
+    "diameter_crown": "11",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Platanus x hispanica",
+    "tree:ref": "AU-688"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286409,
+  "tags": {
+    "diameter_crown": "8",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Platanus x hispanica",
+    "tree:ref": "AU-690"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286410,
+  "tags": {
+    "diameter_crown": "10",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Platanus x hispanica",
+    "tree:ref": "AU-680"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286411,
+  "tags": {
+    "diameter_crown": "6",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Platanus x hispanica",
+    "tree:ref": "AU-679"
+  }
+},
+{
+  "type": "node",
+  "id": 11987286412,
+  "tags": {
+    "diameter_crown": "5",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "species": "Aesculus hippocastanum",
+    "tree:ref": "AU-678"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302768,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302769,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302770,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302771,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302782,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302783,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302786,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302787,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302788,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302789,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302790,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302791,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302792,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302793,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302794,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302795,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302796,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302797,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302798,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302799,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011302800,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011338701,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011338702,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011338703,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011338704,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011338705,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011338706,
+  "tags": {
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011338707,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011338708,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "leaf_type": "broadleaved",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 13011338711,
+  "tags": {
+    "leaf_cycle": "deciduous",
+    "natural": "tree"
+  }
+},
+{
+  "type": "node",
+  "id": 14023822393,
+  "tags": {
+    "diameter_crown": "3",
+    "genus": "Platanus",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "start_date": "2021",
+    "tree:ref": "AU-7746"
+  }
+},
+{
+  "type": "node",
+  "id": 14023822394,
+  "tags": {
+    "diameter_crown": "3",
+    "genus": "Platanus",
+    "leaf_type": "broadleaved",
+    "natural": "tree",
+    "start_date": "2021",
+    "tree:ref": "AU-7745"
+  }
+},
+{
+  "type": "node",
+  "id": 14023914936,
+  "tags": {
+    "natural": "tree"
+  }
+}
+
+  ]
+}

@@ -1,0 +1,16 @@
+.venv
+.env
+.env.*
+.git
+.gitignore
+.claude
+.pytest_cache
+__pycache__
+*.pyc
+tests
+research
+docs
+examples
+*.md
+.cache/
+.uvicorn-*.log

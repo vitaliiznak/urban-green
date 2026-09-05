@@ -1,0 +1,1262 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-09-07T22:14:41Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "way",
+  "id": 4533221,
+  "bounds": {
+    "minlat": 47.3757148,
+    "minlon": 8.5262260,
+    "maxlat": 47.3764347,
+    "maxlon": 8.5274957
+  },
+  "geometry": [
+    { "lat": 47.3763269, "lon": 8.5264003 },
+    { "lat": 47.3763996, "lon": 8.5265849 },
+    { "lat": 47.3764248, "lon": 8.5265845 },
+    { "lat": 47.3764347, "lon": 8.5266235 },
+    { "lat": 47.3764244, "lon": 8.5266839 },
+    { "lat": 47.3763708, "lon": 8.5268050 },
+    { "lat": 47.3762041, "lon": 8.5271537 },
+    { "lat": 47.3760780, "lon": 8.5274161 },
+    { "lat": 47.3760568, "lon": 8.5274563 },
+    { "lat": 47.3760361, "lon": 8.5274957 },
+    { "lat": 47.3760086, "lon": 8.5274456 },
+    { "lat": 47.3758832, "lon": 8.5272165 },
+    { "lat": 47.3758437, "lon": 8.5271468 },
+    { "lat": 47.3758095, "lon": 8.5270684 },
+    { "lat": 47.3757273, "lon": 8.5268837 },
+    { "lat": 47.3757240, "lon": 8.5268762 },
+    { "lat": 47.3757182, "lon": 8.5268608 },
+    { "lat": 47.3757152, "lon": 8.5268470 },
+    { "lat": 47.3757148, "lon": 8.5268266 },
+    { "lat": 47.3757155, "lon": 8.5268073 },
+    { "lat": 47.3757251, "lon": 8.5267860 },
+    { "lat": 47.3757334, "lon": 8.5267738 },
+    { "lat": 47.3760341, "lon": 8.5264889 },
+    { "lat": 47.3762582, "lon": 8.5262260 },
+    { "lat": 47.3762708, "lon": 8.5262579 },
+    { "lat": 47.3763269, "lon": 8.5264003 }
+  ],
+  "tags": {
+    "area": "yes",
+    "bicycle": "no",
+    "highway": "pedestrian",
+    "lit": "yes",
+    "name": "Helvetiaplatz",
+    "name:ko": "헬베티아 광장",
+    "place": "square",
+    "surface": "paving_stones",
+    "wikidata": "Q1236093",
+    "wikimedia_commons": "Category:Helvetiaplatz, Zürich",
+    "wikipedia": "de:Helvetiaplatz (Zürich)"
+  }
+},
+{
+  "type": "way",
+  "id": 4533225,
+  "bounds": {
+    "minlat": 47.3768756,
+    "minlon": 8.5288268,
+    "maxlat": 47.3782966,
+    "maxlon": 8.5303971
+  },
+  "geometry": [
+    { "lat": 47.3768756, "lon": 8.5288268 },
+    { "lat": 47.3769251, "lon": 8.5288857 },
+    { "lat": 47.3771920, "lon": 8.5291742 },
+    { "lat": 47.3773065, "lon": 8.5293000 },
+    { "lat": 47.3778081, "lon": 8.5298407 },
+    { "lat": 47.3778841, "lon": 8.5299239 },
+    { "lat": 47.3779618, "lon": 8.5300115 },
+    { "lat": 47.3781596, "lon": 8.5302262 },
+    { "lat": 47.3781952, "lon": 8.5302648 },
+    { "lat": 47.3782407, "lon": 8.5303142 },
+    { "lat": 47.3782966, "lon": 8.5303971 }
+  ],
+  "tags": {
+    "cycleway:both": "no",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lane_markings": "no",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Kanonengasse",
+    "oneway": "no",
+    "parking:both": "no",
+    "sidewalk": "both",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "wikidata": "Q27325484"
+  }
+},
+{
+  "type": "way",
+  "id": 4533228,
+  "bounds": {
+    "minlat": 47.3755933,
+    "minlon": 8.5287611,
+    "maxlat": 47.3768186,
+    "maxlon": 8.5306189
+  },
+  "geometry": [
+    { "lat": 47.3768186, "lon": 8.5287611 },
+    { "lat": 47.3767850, "lon": 8.5288117 },
+    { "lat": 47.3767617, "lon": 8.5288467 },
+    { "lat": 47.3763634, "lon": 8.5294453 },
+    { "lat": 47.3763455, "lon": 8.5294721 },
+    { "lat": 47.3762603, "lon": 8.5296031 },
+    { "lat": 47.3761700, "lon": 8.5297337 },
+    { "lat": 47.3760342, "lon": 8.5299395 },
+    { "lat": 47.3758018, "lon": 8.5302884 },
+    { "lat": 47.3755933, "lon": 8.5306189 }
+  ],
+  "tags": {
+    "cyclestreet": "yes",
+    "cycleway:left": "lane",
+    "cycleway:left:lane": "advisory",
+    "cycleway:right": "no",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lcn": "yes",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Zeughausstrasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk:both": "separate",
+    "smoothness": "good",
+    "surface": "asphalt",
+    "wikidata": "Q27325567"
+  }
+},
+{
+  "type": "way",
+  "id": 4592655,
+  "bounds": {
+    "minlat": 47.3764281,
+    "minlon": 8.5275705,
+    "maxlat": 47.3769707,
+    "maxlon": 8.5281977
+  },
+  "geometry": [
+    { "lat": 47.3764281, "lon": 8.5281977 },
+    { "lat": 47.3764601, "lon": 8.5281530 },
+    { "lat": 47.3768808, "lon": 8.5275928 },
+    { "lat": 47.3769113, "lon": 8.5275705 },
+    { "lat": 47.3769374, "lon": 8.5275724 },
+    { "lat": 47.3769707, "lon": 8.5275821 }
+  ],
+  "tags": {
+    "cycleway": "opposite",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Müllerstrasse",
+    "oneway": "yes",
+    "sidewalk": "both",
+    "source": "survey",
+    "surface": "asphalt",
+    "wikidata": "Q27325387"
+  }
+},
+{
+  "type": "way",
+  "id": 4687928,
+  "bounds": {
+    "minlat": 47.3779533,
+    "minlon": 8.5280435,
+    "maxlat": 47.3787044,
+    "maxlon": 8.5288518
+  },
+  "geometry": [
+    { "lat": 47.3787044, "lon": 8.5288518 },
+    { "lat": 47.3786056, "lon": 8.5287458 },
+    { "lat": 47.3784970, "lon": 8.5286293 },
+    { "lat": 47.3784467, "lon": 8.5285754 },
+    { "lat": 47.3783942, "lon": 8.5285188 },
+    { "lat": 47.3779938, "lon": 8.5280871 },
+    { "lat": 47.3779533, "lon": 8.5280435 }
+  ],
+  "tags": {
+    "cycleway": "opposite",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "motorcar:conditional": "no @ (22:00-03:00)",
+    "motorcycle:conditional": "no @ (22:00-03:00)",
+    "name": "Tellstrasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk": "both",
+    "surface": "asphalt",
+    "wikidata": "Q27325491"
+  }
+},
+{
+  "type": "way",
+  "id": 4743765,
+  "bounds": {
+    "minlat": 47.3778081,
+    "minlon": 8.5285754,
+    "maxlat": 47.3784467,
+    "maxlon": 8.5298407
+  },
+  "geometry": [
+    { "lat": 47.3784467, "lon": 8.5285754 },
+    { "lat": 47.3784075, "lon": 8.5286531 },
+    { "lat": 47.3782037, "lon": 8.5290575 },
+    { "lat": 47.3781253, "lon": 8.5292121 },
+    { "lat": 47.3779998, "lon": 8.5294607 },
+    { "lat": 47.3778426, "lon": 8.5297722 },
+    { "lat": 47.3778081, "lon": 8.5298407 }
+  ],
+  "tags": {
+    "cycleway": "opposite",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "motorcar:conditional": "no @ (22:00-03:00)",
+    "motorcycle:conditional": "no @ (22:00-03:00)",
+    "name": "Zwinglistrasse",
+    "name:etymology:wikidata": "Q123034",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk": "both",
+    "surface": "asphalt",
+    "wikidata": "Q27324985"
+  }
+},
+{
+  "type": "way",
+  "id": 4743766,
+  "bounds": {
+    "minlat": 47.3777027,
+    "minlon": 8.5280435,
+    "maxlat": 47.3779533,
+    "maxlon": 8.5285264
+  },
+  "geometry": [
+    { "lat": 47.3779533, "lon": 8.5280435 },
+    { "lat": 47.3779183, "lon": 8.5281109 },
+    { "lat": 47.3777027, "lon": 8.5285264 }
+  ],
+  "tags": {
+    "cycleway": "opposite",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "motorcar:conditional": "no @ (22:00-03:00)",
+    "motorcycle:conditional": "no @ (22:00-03:00)",
+    "name": "Dienerstrasse",
+    "oneway": "yes",
+    "sidewalk": "both",
+    "surface": "asphalt",
+    "wikidata": "Q27322935"
+  }
+},
+{
+  "type": "way",
+  "id": 4743768,
+  "bounds": {
+    "minlat": 47.3768756,
+    "minlon": 8.5267194,
+    "maxlat": 47.3779735,
+    "maxlon": 8.5288268
+  },
+  "geometry": [
+    { "lat": 47.3779735, "lon": 8.5267194 },
+    { "lat": 47.3779501, "lon": 8.5267669 },
+    { "lat": 47.3774523, "lon": 8.5277204 },
+    { "lat": 47.3774339, "lon": 8.5277562 },
+    { "lat": 47.3774198, "lon": 8.5277833 },
+    { "lat": 47.3773891, "lon": 8.5278422 },
+    { "lat": 47.3769119, "lon": 8.5287572 },
+    { "lat": 47.3769035, "lon": 8.5287734 },
+    { "lat": 47.3768756, "lon": 8.5288268 }
+  ],
+  "tags": {
+    "cyclestreet": "yes",
+    "cycleway:left": "no",
+    "cycleway:right": "lane",
+    "cycleway:right:oneway": "-1",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Brauerstrasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk": "both",
+    "source": "survey",
+    "surface": "asphalt",
+    "wikidata": "Q27322946"
+  }
+},
+{
+  "type": "way",
+  "id": 4743773,
+  "bounds": {
+    "minlat": 47.3767154,
+    "minlon": 8.5267098,
+    "maxlat": 47.3772312,
+    "maxlon": 8.5267466
+  },
+  "geometry": [
+    { "lat": 47.3772312, "lon": 8.5267466 },
+    { "lat": 47.3771334, "lon": 8.5267179 },
+    { "lat": 47.3767154, "lon": 8.5267098 }
+  ],
+  "tags": {
+    "highway": "living_street",
+    "lit": "yes",
+    "maxspeed": "20",
+    "name": "Molkenstrasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk": "no",
+    "source": "survey",
+    "surface": "asphalt",
+    "wikidata": "Q27321567"
+  }
+},
+{
+  "type": "way",
+  "id": 4803405,
+  "bounds": {
+    "minlat": 47.3776875,
+    "minlon": 8.5251775,
+    "maxlat": 47.3778507,
+    "maxlon": 8.5255997
+  },
+  "geometry": [
+    { "lat": 47.3778507, "lon": 8.5251775 },
+    { "lat": 47.3777634, "lon": 8.5254034 },
+    { "lat": 47.3776875, "lon": 8.5255997 }
+  ],
+  "tags": {
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Hohlstrasse",
+    "sidewalk:both": "separate",
+    "surface": "asphalt",
+    "wikidata": "Q27331376"
+  }
+},
+{
+  "type": "way",
+  "id": 4803426,
+  "bounds": {
+    "minlat": 47.3779735,
+    "minlon": 8.5262633,
+    "maxlat": 47.3782164,
+    "maxlon": 8.5267194
+  },
+  "geometry": [
+    { "lat": 47.3782164, "lon": 8.5262633 },
+    { "lat": 47.3780005, "lon": 8.5266688 },
+    { "lat": 47.3779735, "lon": 8.5267194 }
+  ],
+  "tags": {
+    "cyclestreet": "yes",
+    "cycleway:left": "lane",
+    "cycleway:left:oneway": "-1",
+    "cycleway:right": "no",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Brauerstrasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "surface": "asphalt",
+    "wikidata": "Q27322946"
+  }
+},
+{
+  "type": "way",
+  "id": 4803427,
+  "bounds": {
+    "minlat": 47.3778507,
+    "minlon": 8.5251775,
+    "maxlat": 47.3784856,
+    "maxlon": 8.5257497
+  },
+  "geometry": [
+    { "lat": 47.3778507, "lon": 8.5251775 },
+    { "lat": 47.3779189, "lon": 8.5252367 },
+    { "lat": 47.3784258, "lon": 8.5256960 },
+    { "lat": 47.3784585, "lon": 8.5257253 },
+    { "lat": 47.3784856, "lon": 8.5257497 }
+  ],
+  "tags": {
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Herbartstrasse",
+    "name:etymology:wikidata": "Q76685",
+    "sidewalk:both": "separate",
+    "surface": "asphalt",
+    "wikidata": "Q27321690"
+  }
+},
+{
+  "type": "way",
+  "id": 4803428,
+  "bounds": {
+    "minlat": 47.3756824,
+    "minlon": 8.5240307,
+    "maxlat": 47.3767502,
+    "maxlon": 8.5247930
+  },
+  "geometry": [
+    { "lat": 47.3756824, "lon": 8.5240307 },
+    { "lat": 47.3757418, "lon": 8.5240726 },
+    { "lat": 47.3761436, "lon": 8.5243559 },
+    { "lat": 47.3762047, "lon": 8.5243991 },
+    { "lat": 47.3762596, "lon": 8.5244383 },
+    { "lat": 47.3763912, "lon": 8.5245324 },
+    { "lat": 47.3766732, "lon": 8.5247341 },
+    { "lat": 47.3767502, "lon": 8.5247930 }
+  ],
+  "tags": {
+    "cycleway:both": "no",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lcn": "yes",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Kernstrasse",
+    "name:etymology:wikidata": "Q1303505",
+    "sidewalk:both": "separate",
+    "surface": "asphalt",
+    "wikidata": "Q27331963"
+  }
+},
+{
+  "type": "way",
+  "id": 6275379,
+  "bounds": {
+    "minlat": 47.3776315,
+    "minlon": 8.5257720,
+    "maxlat": 47.3782164,
+    "maxlon": 8.5262633
+  },
+  "geometry": [
+    { "lat": 47.3776315, "lon": 8.5257720 },
+    { "lat": 47.3776736, "lon": 8.5258057 },
+    { "lat": 47.3778148, "lon": 8.5259205 },
+    { "lat": 47.3778587, "lon": 8.5259562 },
+    { "lat": 47.3778842, "lon": 8.5259573 },
+    { "lat": 47.3779794, "lon": 8.5260375 },
+    { "lat": 47.3779977, "lon": 8.5260697 },
+    { "lat": 47.3781740, "lon": 8.5262256 },
+    { "lat": 47.3781911, "lon": 8.5262408 },
+    { "lat": 47.3782164, "lon": 8.5262633 }
+  ],
+  "tags": {
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Kernstrasse",
+    "name:etymology:wikidata": "Q1303505",
+    "surface": "asphalt",
+    "vehicle": "private",
+    "wikidata": "Q27331963"
+  }
+},
+{
+  "type": "way",
+  "id": 6275380,
+  "bounds": {
+    "minlat": 47.3768841,
+    "minlon": 8.5252326,
+    "maxlat": 47.3772749,
+    "maxlon": 8.5260185
+  },
+  "geometry": [
+    { "lat": 47.3768841, "lon": 8.5260185 },
+    { "lat": 47.3769194, "lon": 8.5259474 },
+    { "lat": 47.3772388, "lon": 8.5253054 },
+    { "lat": 47.3772749, "lon": 8.5252326 }
+  ],
+  "tags": {
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Marmorgasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk:both": "separate",
+    "surface": "asphalt",
+    "wikidata": "Q27321381"
+  }
+},
+{
+  "type": "way",
+  "id": 6275382,
+  "bounds": {
+    "minlat": 47.3788017,
+    "minlon": 8.5249910,
+    "maxlat": 47.3799531,
+    "maxlon": 8.5272099
+  },
+  "geometry": [
+    { "lat": 47.3799531, "lon": 8.5249910 },
+    { "lat": 47.3799145, "lon": 8.5250642 },
+    { "lat": 47.3797189, "lon": 8.5254357 },
+    { "lat": 47.3796801, "lon": 8.5255172 },
+    { "lat": 47.3796364, "lon": 8.5255990 },
+    { "lat": 47.3794315, "lon": 8.5259818 },
+    { "lat": 47.3793938, "lon": 8.5260533 },
+    { "lat": 47.3793480, "lon": 8.5261410 },
+    { "lat": 47.3788191, "lon": 8.5271526 },
+    { "lat": 47.3788017, "lon": 8.5272099 }
+  ],
+  "tags": {
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Rolandstrasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk:both": "separate",
+    "surface": "asphalt",
+    "wikidata": "Q27328986"
+  }
+},
+{
+  "type": "way",
+  "id": 14841068,
+  "bounds": {
+    "minlat": 47.3778507,
+    "minlon": 8.5240791,
+    "maxlat": 47.3782957,
+    "maxlon": 8.5251775
+  },
+  "geometry": [
+    { "lat": 47.3778507, "lon": 8.5251775 },
+    { "lat": 47.3778701, "lon": 8.5251240 },
+    { "lat": 47.3778917, "lon": 8.5250635 },
+    { "lat": 47.3781619, "lon": 8.5244011 },
+    { "lat": 47.3782060, "lon": 8.5242906 },
+    { "lat": 47.3782957, "lon": 8.5240791 }
+  ],
+  "tags": {
+    "highway": "living_street",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Hohlstrasse",
+    "surface": "asphalt",
+    "wikidata": "Q27331376"
+  }
+},
+{
+  "type": "way",
+  "id": 15217376,
+  "bounds": {
+    "minlat": 47.3771745,
+    "minlon": 8.5247159,
+    "maxlat": 47.3777154,
+    "maxlon": 8.5253475
+  },
+  "geometry": [
+    { "lat": 47.3776477, "lon": 8.5250368 },
+    { "lat": 47.3776230, "lon": 8.5250976 },
+    { "lat": 47.3775426, "lon": 8.5250301 },
+    { "lat": 47.3775656, "lon": 8.5249736 },
+    { "lat": 47.3774203, "lon": 8.5248502 },
+    { "lat": 47.3773973, "lon": 8.5249061 },
+    { "lat": 47.3773174, "lon": 8.5248368 },
+    { "lat": 47.3773401, "lon": 8.5247746 },
+    { "lat": 47.3772729, "lon": 8.5247159 },
+    { "lat": 47.3771745, "lon": 8.5249690 },
+    { "lat": 47.3772414, "lon": 8.5250264 },
+    { "lat": 47.3772464, "lon": 8.5250138 },
+    { "lat": 47.3775543, "lon": 8.5252780 },
+    { "lat": 47.3775493, "lon": 8.5252906 },
+    { "lat": 47.3776156, "lon": 8.5253475 },
+    { "lat": 47.3777154, "lon": 8.5250934 },
+    { "lat": 47.3776477, "lon": 8.5250368 }
+  ],
+  "tags": {
+    "addr:city": "Zürich",
+    "addr:country": "CH",
+    "addr:housename": "Schulhaus Kern",
+    "addr:housenumber": "45",
+    "addr:postcode": "8004",
+    "addr:street": "Kernstrasse",
+    "building": "school",
+    "building:levels": "5"
+  }
+},
+{
+  "type": "way",
+  "id": 15217400,
+  "bounds": {
+    "minlat": 47.3768830,
+    "minlon": 8.5240957,
+    "maxlat": 47.3772375,
+    "maxlon": 8.5249170
+  },
+  "geometry": [
+    { "lat": 47.3772375, "lon": 8.5241809 },
+    { "lat": 47.3771423, "lon": 8.5244744 },
+    { "lat": 47.3771593, "lon": 8.5244878 },
+    { "lat": 47.3771128, "lon": 8.5246294 },
+    { "lat": 47.3770959, "lon": 8.5246165 },
+    { "lat": 47.3769972, "lon": 8.5249170 },
+    { "lat": 47.3768830, "lon": 8.5248184 },
+    { "lat": 47.3769752, "lon": 8.5245318 },
+    { "lat": 47.3769590, "lon": 8.5245202 },
+    { "lat": 47.3770051, "lon": 8.5243776 },
+    { "lat": 47.3770215, "lon": 8.5243896 },
+    { "lat": 47.3771189, "lon": 8.5240957 },
+    { "lat": 47.3772375, "lon": 8.5241809 }
+  ],
+  "tags": {
+    "addr:city": "Zürich",
+    "addr:country": "CH",
+    "addr:housename": "Turnhalle Kern",
+    "addr:housenumber": "41",
+    "addr:postcode": "8004",
+    "addr:street": "Kernstrasse",
+    "building": "sports_hall",
+    "sport": "multi"
+  }
+},
+{
+  "type": "way",
+  "id": 15217437,
+  "bounds": {
+    "minlat": 47.3778821,
+    "minlon": 8.5232786,
+    "maxlat": 47.3784239,
+    "maxlon": 8.5245854
+  },
+  "geometry": [
+    { "lat": 47.3779546, "lon": 8.5245854 },
+    { "lat": 47.3778821, "lon": 8.5245208 },
+    { "lat": 47.3779319, "lon": 8.5243970 },
+    { "lat": 47.3780368, "lon": 8.5241361 },
+    { "lat": 47.3781501, "lon": 8.5238552 },
+    { "lat": 47.3783162, "lon": 8.5234444 },
+    { "lat": 47.3784239, "lon": 8.5232786 }
+  ],
+  "tags": {
+    "foot": "yes",
+    "highway": "path"
+  }
+},
+{
+  "type": "way",
+  "id": 15217456,
+  "bounds": {
+    "minlat": 47.3771204,
+    "minlon": 8.5227019,
+    "maxlat": 47.3784239,
+    "maxlon": 8.5240517
+  },
+  "geometry": [
+    { "lat": 47.3784239, "lon": 8.5232786 },
+    { "lat": 47.3783303, "lon": 8.5232476 },
+    { "lat": 47.3783231, "lon": 8.5232315 },
+    { "lat": 47.3782504, "lon": 8.5230995 },
+    { "lat": 47.3781921, "lon": 8.5230312 },
+    { "lat": 47.3778497, "lon": 8.5227628 },
+    { "lat": 47.3778048, "lon": 8.5227172 },
+    { "lat": 47.3777172, "lon": 8.5227019 },
+    { "lat": 47.3776513, "lon": 8.5227575 },
+    { "lat": 47.3774742, "lon": 8.5232000 },
+    { "lat": 47.3773996, "lon": 8.5234526 },
+    { "lat": 47.3772411, "lon": 8.5238910 },
+    { "lat": 47.3772259, "lon": 8.5240517 },
+    { "lat": 47.3771204, "lon": 8.5239742 }
+  ],
+  "tags": {
+    "foot": "yes",
+    "highway": "path"
+  }
+},
+{
+  "type": "way",
+  "id": 15217521,
+  "bounds": {
+    "minlat": 47.3780851,
+    "minlon": 8.5245983,
+    "maxlat": 47.3784836,
+    "maxlon": 8.5253002
+  },
+  "geometry": [
+    { "lat": 47.3784836, "lon": 8.5247556 },
+    { "lat": 47.3783051, "lon": 8.5245983 },
+    { "lat": 47.3782250, "lon": 8.5247965 },
+    { "lat": 47.3782182, "lon": 8.5247905 },
+    { "lat": 47.3781564, "lon": 8.5249435 },
+    { "lat": 47.3781633, "lon": 8.5249495 },
+    { "lat": 47.3780851, "lon": 8.5251431 },
+    { "lat": 47.3782634, "lon": 8.5253002 },
+    { "lat": 47.3783227, "lon": 8.5251535 },
+    { "lat": 47.3782576, "lon": 8.5250961 },
+    { "lat": 47.3782880, "lon": 8.5250209 },
+    { "lat": 47.3783485, "lon": 8.5250742 },
+    { "lat": 47.3783540, "lon": 8.5250606 },
+    { "lat": 47.3783656, "lon": 8.5250709 },
+    { "lat": 47.3783864, "lon": 8.5250194 },
+    { "lat": 47.3783728, "lon": 8.5250074 },
+    { "lat": 47.3783852, "lon": 8.5249765 },
+    { "lat": 47.3783815, "lon": 8.5249732 },
+    { "lat": 47.3783545, "lon": 8.5249495 },
+    { "lat": 47.3783271, "lon": 8.5249253 },
+    { "lat": 47.3783584, "lon": 8.5248478 },
+    { "lat": 47.3783858, "lon": 8.5248720 },
+    { "lat": 47.3784128, "lon": 8.5248957 },
+    { "lat": 47.3784232, "lon": 8.5249049 },
+    { "lat": 47.3784836, "lon": 8.5247556 }
+  ],
+  "tags": {
+    "addr:city": "Zürich",
+    "addr:country": "CH",
+    "addr:housename": "Schulhaus Hohl",
+    "addr:housenumber": "68",
+    "addr:postcode": "8004",
+    "addr:street": "Hohlstrasse",
+    "building": "school",
+    "building:levels": "4"
+  }
+},
+{
+  "type": "way",
+  "id": 15217539,
+  "bounds": {
+    "minlat": 47.3789033,
+    "minlon": 8.5242786,
+    "maxlat": 47.3792626,
+    "maxlon": 8.5249544
+  },
+  "geometry": [
+    { "lat": 47.3789033, "lon": 8.5249544 },
+    { "lat": 47.3790106, "lon": 8.5247551 },
+    { "lat": 47.3792626, "lon": 8.5242786 }
+  ],
+  "tags": {
+    "cyclestreet": "yes",
+    "cycleway:both": "shared_lane",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Brauerstrasse",
+    "sidewalk:both": "separate",
+    "surface": "asphalt",
+    "wikidata": "Q27322946"
+  }
+},
+{
+  "type": "way",
+  "id": 15217571,
+  "bounds": {
+    "minlat": 47.3788608,
+    "minlon": 8.5253721,
+    "maxlat": 47.3790818,
+    "maxlon": 8.5257229
+  },
+  "geometry": [
+    { "lat": 47.3790818, "lon": 8.5254768 },
+    { "lat": 47.3789915, "lon": 8.5253721 },
+    { "lat": 47.3789410, "lon": 8.5254671 },
+    { "lat": 47.3789348, "lon": 8.5254599 },
+    { "lat": 47.3789039, "lon": 8.5255181 },
+    { "lat": 47.3789101, "lon": 8.5255253 },
+    { "lat": 47.3788608, "lon": 8.5256180 },
+    { "lat": 47.3789513, "lon": 8.5257229 },
+    { "lat": 47.3789974, "lon": 8.5256360 },
+    { "lat": 47.3790222, "lon": 8.5256647 },
+    { "lat": 47.3790605, "lon": 8.5255926 },
+    { "lat": 47.3790356, "lon": 8.5255637 },
+    { "lat": 47.3790818, "lon": 8.5254768 }
+  ],
+  "tags": {
+    "addr:city": "Zürich",
+    "addr:country": "CH",
+    "addr:housename": "Schulhaus Brauer",
+    "addr:housenumber": "66",
+    "addr:postcode": "8004",
+    "addr:street": "Brauerstrasse",
+    "building": "school"
+  }
+},
+{
+  "type": "way",
+  "id": 25623162,
+  "bounds": {
+    "minlat": 47.3771084,
+    "minlon": 8.5274087,
+    "maxlat": 47.3774198,
+    "maxlon": 8.5277833
+  },
+  "geometry": [
+    { "lat": 47.3771084, "lon": 8.5274087 },
+    { "lat": 47.3773725, "lon": 8.5277264 },
+    { "lat": 47.3774198, "lon": 8.5277833 }
+  ],
+  "tags": {
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Kurzgasse",
+    "oneway": "yes",
+    "oneway:bicycle": "yes",
+    "sidewalk": "separate",
+    "source": "survey",
+    "surface": "asphalt",
+    "wikidata": "Q27323932"
+  }
+},
+{
+  "type": "way",
+  "id": 26645468,
+  "bounds": {
+    "minlat": 47.3784704,
+    "minlon": 8.5257615,
+    "maxlat": 47.3791408,
+    "maxlon": 8.5270135
+  },
+  "geometry": [
+    { "lat": 47.3784704, "lon": 8.5270135 },
+    { "lat": 47.3784942, "lon": 8.5269562 },
+    { "lat": 47.3786378, "lon": 8.5266941 },
+    { "lat": 47.3786891, "lon": 8.5265991 },
+    { "lat": 47.3787079, "lon": 8.5265642 },
+    { "lat": 47.3789732, "lon": 8.5260722 },
+    { "lat": 47.3791041, "lon": 8.5258294 },
+    { "lat": 47.3791408, "lon": 8.5257615 }
+  ],
+  "tags": {
+    "cycleway": "opposite",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Dienerstrasse",
+    "oneway": "yes",
+    "surface": "asphalt",
+    "wikidata": "Q27322935"
+  }
+},
+{
+  "type": "way",
+  "id": 26645783,
+  "bounds": {
+    "minlat": 47.3782164,
+    "minlon": 8.5255912,
+    "maxlat": 47.3785699,
+    "maxlon": 8.5262633
+  },
+  "geometry": [
+    { "lat": 47.3782164, "lon": 8.5262633 },
+    { "lat": 47.3782459, "lon": 8.5262072 },
+    { "lat": 47.3783866, "lon": 8.5259382 },
+    { "lat": 47.3784488, "lon": 8.5258191 },
+    { "lat": 47.3784856, "lon": 8.5257497 },
+    { "lat": 47.3785261, "lon": 8.5256734 },
+    { "lat": 47.3785699, "lon": 8.5255912 }
+  ],
+  "tags": {
+    "cyclestreet": "yes",
+    "cycleway:both": "shared_lane",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Brauerstrasse",
+    "surface": "asphalt",
+    "wikidata": "Q27322946"
+  }
+},
+{
+  "type": "way",
+  "id": 26645827,
+  "bounds": {
+    "minlat": 47.3767900,
+    "minlon": 8.5275821,
+    "maxlat": 47.3769707,
+    "maxlon": 8.5287265
+  },
+  "geometry": [
+    { "lat": 47.3767900, "lon": 8.5287265 },
+    { "lat": 47.3768019, "lon": 8.5286503 },
+    { "lat": 47.3769707, "lon": 8.5275821 }
+  ],
+  "tags": {
+    "cycleway": "opposite",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lcn": "yes",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Hohlstrasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk": "both",
+    "source": "survey",
+    "surface": "asphalt",
+    "wikidata": "Q27331376"
+  }
+},
+{
+  "type": "way",
+  "id": 26645917,
+  "bounds": {
+    "minlat": 47.3747280,
+    "minlon": 8.5281977,
+    "maxlat": 47.3764281,
+    "maxlon": 8.5303167
+  },
+  "geometry": [
+    { "lat": 47.3747280, "lon": 8.5303167 },
+    { "lat": 47.3750295, "lon": 8.5299409 },
+    { "lat": 47.3750807, "lon": 8.5298771 },
+    { "lat": 47.3751389, "lon": 8.5298046 },
+    { "lat": 47.3752540, "lon": 8.5296611 },
+    { "lat": 47.3754426, "lon": 8.5294260 },
+    { "lat": 47.3755294, "lon": 8.5293178 },
+    { "lat": 47.3756772, "lon": 8.5291336 },
+    { "lat": 47.3757325, "lon": 8.5290647 },
+    { "lat": 47.3757841, "lon": 8.5290004 },
+    { "lat": 47.3758776, "lon": 8.5288838 },
+    { "lat": 47.3763964, "lon": 8.5282372 },
+    { "lat": 47.3764281, "lon": 8.5281977 }
+  ],
+  "tags": {
+    "cycleway:both": "no",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Müllerstrasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk:both": "separate",
+    "surface": "asphalt",
+    "wikidata": "Q27325387"
+  }
+},
+{
+  "type": "way",
+  "id": 26645942,
+  "bounds": {
+    "minlat": 47.3773794,
+    "minlon": 8.5257720,
+    "maxlat": 47.3776315,
+    "maxlon": 8.5263690
+  },
+  "geometry": [
+    { "lat": 47.3776315, "lon": 8.5257720 },
+    { "lat": 47.3774200, "lon": 8.5262739 },
+    { "lat": 47.3774061, "lon": 8.5263064 },
+    { "lat": 47.3773794, "lon": 8.5263690 }
+  ],
+  "tags": {
+    "cycleway:both": "no",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lcn": "yes",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Hohlstrasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "surface": "asphalt",
+    "wikidata": "Q27331376"
+  }
+},
+{
+  "type": "way",
+  "id": 26645995,
+  "bounds": {
+    "minlat": 47.3779533,
+    "minlon": 8.5276391,
+    "maxlat": 47.3781580,
+    "maxlon": 8.5280435
+  },
+  "geometry": [
+    { "lat": 47.3779533, "lon": 8.5280435 },
+    { "lat": 47.3779849, "lon": 8.5279811 },
+    { "lat": 47.3780841, "lon": 8.5277852 },
+    { "lat": 47.3781580, "lon": 8.5276391 }
+  ],
+  "tags": {
+    "cycleway:left": "shoulder",
+    "cycleway:left:oneway": "-1",
+    "cycleway:right": "no",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "motorcar:conditional": "no @ (22:00-03:00)",
+    "motorcycle:conditional": "no @ (22:00-03:00)",
+    "name": "Dienerstrasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk": "both",
+    "surface": "asphalt",
+    "wikidata": "Q27322935"
+  }
+},
+{
+  "type": "way",
+  "id": 26646052,
+  "bounds": {
+    "minlat": 47.3784467,
+    "minlon": 8.5273572,
+    "maxlat": 47.3790529,
+    "maxlon": 8.5285754
+  },
+  "geometry": [
+    { "lat": 47.3784467, "lon": 8.5285754 },
+    { "lat": 47.3784815, "lon": 8.5285054 },
+    { "lat": 47.3785512, "lon": 8.5283638 },
+    { "lat": 47.3790291, "lon": 8.5274030 },
+    { "lat": 47.3790529, "lon": 8.5273572 }
+  ],
+  "tags": {
+    "cycleway:both": "no",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "motorcar:conditional": "no @ (22:00-03:00)",
+    "motorcycle:conditional": "no @ (22:00-03:00)",
+    "name": "Zwinglistrasse",
+    "name:etymology:wikidata": "Q123034",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk": "both",
+    "surface": "asphalt",
+    "wikidata": "Q27324985"
+  }
+},
+{
+  "type": "way",
+  "id": 26646072,
+  "bounds": {
+    "minlat": 47.3773335,
+    "minlon": 8.5263690,
+    "maxlat": 47.3773794,
+    "maxlon": 8.5264858
+  },
+  "geometry": [
+    { "lat": 47.3773335, "lon": 8.5264858 },
+    { "lat": 47.3773537, "lon": 8.5264345 },
+    { "lat": 47.3773794, "lon": 8.5263690 }
+  ],
+  "tags": {
+    "cycleway:both": "no",
+    "foot": "use_sidepath",
+    "highway": "residential",
+    "lcn": "yes",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Hohlstrasse",
+    "oneway": "no",
+    "sidewalk": "separate",
+    "source": "survey",
+    "surface": "asphalt",
+    "wikidata": "Q27331376"
+  }
+},
+{
+  "type": "way",
+  "id": 26646102,
+  "bounds": {
+    "minlat": 47.3783612,
+    "minlon": 8.5241368,
+    "maxlat": 47.3790106,
+    "maxlon": 8.5247551
+  },
+  "geometry": [
+    { "lat": 47.3790106, "lon": 8.5247551 },
+    { "lat": 47.3789836, "lon": 8.5247294 },
+    { "lat": 47.3789752, "lon": 8.5247214 },
+    { "lat": 47.3788001, "lon": 8.5245547 },
+    { "lat": 47.3783612, "lon": 8.5241368 }
+  ],
+  "tags": {
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Hellmutstrasse",
+    "sidewalk:both": "separate",
+    "surface": "asphalt",
+    "wikidata": "Q27321677"
+  }
+},
+{
+  "type": "way",
+  "id": 26675135,
+  "bounds": {
+    "minlat": 47.3789033,
+    "minlon": 8.5249544,
+    "maxlat": 47.3793193,
+    "maxlon": 8.5254216
+  },
+  "geometry": [
+    { "lat": 47.3789033, "lon": 8.5249544 },
+    { "lat": 47.3789319, "lon": 8.5249866 },
+    { "lat": 47.3789653, "lon": 8.5250241 },
+    { "lat": 47.3791282, "lon": 8.5252071 },
+    { "lat": 47.3792650, "lon": 8.5253608 },
+    { "lat": 47.3793193, "lon": 8.5254216 }
+  ],
+  "tags": {
+    "cycleway:both": "no",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Nietengasse",
+    "oneway": "yes",
+    "oneway:bicycle": "no",
+    "sidewalk:both": "separate",
+    "surface": "asphalt",
+    "wikidata": "Q27322927"
+  }
+},
+{
+  "type": "way",
+  "id": 26675841,
+  "bounds": {
+    "minlat": 47.3782957,
+    "minlon": 8.5240791,
+    "maxlat": 47.3783612,
+    "maxlon": 8.5241368
+  },
+  "geometry": [
+    { "lat": 47.3782957, "lon": 8.5240791 },
+    { "lat": 47.3783513, "lon": 8.5241281 },
+    { "lat": 47.3783612, "lon": 8.5241368 }
+  ],
+  "tags": {
+    "highway": "service",
+    "lit": "yes",
+    "motor_vehicle": "no",
+    "name": "Hellmutstrasse",
+    "surface": "asphalt",
+    "wikidata": "Q27321677"
+  }
+},
+{
+  "type": "way",
+  "id": 26675974,
+  "bounds": {
+    "minlat": 47.3787646,
+    "minlon": 8.5249544,
+    "maxlat": 47.3789033,
+    "maxlon": 8.5252238
+  },
+  "geometry": [
+    { "lat": 47.3789033, "lon": 8.5249544 },
+    { "lat": 47.3787646, "lon": 8.5252238 }
+  ],
+  "tags": {
+    "cyclestreet": "yes",
+    "highway": "residential",
+    "lit": "yes",
+    "maxspeed": "30",
+    "name": "Brauerstrasse",
+    "sidewalk:both": "separate",
+    "surface": "asphalt",
+    "wikidata": "Q27322946"
+  }
+},
+{
+  "type": "way",
+  "id": 27435598,
+  "bounds": {
+    "minlat": 47.3782164,
+    "minlon": 8.5262633,
+    "maxlat": 47.3786378,
+    "maxlon": 8.5266941
+  },
+  "geometry": [
+    { "lat": 47.3786378, "lon": 8.5266941 },
+    { "lat": 47.3786086, "lon": 8.5266617 },
+    { "lat": 47.3784663, "lon": 8.5265006 },
+    { "lat": 47.3783779, "lon": 8.5264006 },
+    { "lat": 47.3782736, "lon": 8.5262826 },
+    { "lat": 47.3782629, "lon": 8.5262756 },
+    { "lat": 47.3782164, "lon": 8.5262633 }
+  ],
+  "tags": {
+    "highway": "service",
+    "lit": "yes",
+    "name": "Kernstrasse",
+    "name:etymology:wikidata": "Q1303505",
+    "surface": "asphalt",
+    "vehicle": "destination",
+    "wikidata": "Q27331963"
+  }
+},
+{
+  "type": "way",
+  "id": 27844151,
+  "bounds": {
+    "minlat": 47.3776052,
+    "minlon": 8.5227628,
+    "maxlat": 47.3780368,
+    "maxlon": 8.5243078
+  },
+  "geometry": [
+    { "lat": 47.3778497, "lon": 8.5227628 },
+    { "lat": 47.3778863, "lon": 8.5230049 },
+    { "lat": 47.3778978, "lon": 8.5231326 },
+    { "lat": 47.3779058, "lon": 8.5233597 },
+    { "lat": 47.3779053, "lon": 8.5236201 },
+    { "lat": 47.3779118, "lon": 8.5237178 },
+    { "lat": 47.3779304, "lon": 8.5237952 },
+    { "lat": 47.3779674, "lon": 8.5239487 },
+    { "lat": 47.3779760, "lon": 8.5240645 },
+    { "lat": 47.3780368, "lon": 8.5241361 },
+    { "lat": 47.3776780, "lon": 8.5241486 },
+    { "lat": 47.3776052, "lon": 8.5243078 }
+  ],
+  "tags": {
+    "foot": "yes",
+    "highway": "path"
+  }
+},
+{
+  "type": "way",
+  "id": 28216744,
+  "bounds": {
+    "minlat": 47.3771532,
+    "minlon": 8.5271155,
+    "maxlat": 47.3771876,
+    "maxlon": 8.5271552
+  },
+  "geometry": [
+    { "lat": 47.3771532, "lon": 8.5271155 },
+    { "lat": 47.3771876, "lon": 8.5271552 }
+  ],
+  "tags": {
+    "highway": "footway",
+    "surface": "asphalt"
+  }
+}
+
+  ]
+}

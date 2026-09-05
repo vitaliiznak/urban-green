@@ -1,0 +1,328 @@
+<title>Six Overnight Builds</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F5F6F2; --ink:#1A2129; --ink-2:#3E474F; --muted:#66707A; --rule:#D6DBD3; --panel:#ECEFE9;
+  --accent:#D4521C; --accent-ink:#B84314; --blue:#1E6FAE; --green:#3B7D4E;
+  --c-reco:#D4521C; --c-alt:#1E6FAE; --grid:#DCE0D9;
+  --warn-bg:#FBEFE8; --warn-ink:#8A3A12;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141A1F; --ink:#E6EAE6; --ink-2:#C4CBC7; --muted:#97A1A8; --rule:#2C353C; --panel:#1B2329;
+    --accent:#E3622A; --accent-ink:#F08A5E; --blue:#3F8FC6; --green:#6BBF84;
+    --c-reco:#E3622A; --c-alt:#3F8FC6; --grid:#28323A;
+    --warn-bg:#2A1E17; --warn-ink:#F0B08E;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141A1F; --ink:#E6EAE6; --ink-2:#C4CBC7; --muted:#97A1A8; --rule:#2C353C; --panel:#1B2329;
+  --accent:#E3622A; --accent-ink:#F08A5E; --blue:#3F8FC6; --green:#6BBF84;
+  --c-reco:#E3622A; --c-alt:#3F8FC6; --grid:#28323A;
+  --warn-bg:#2A1E17; --warn-ink:#F0B08E;
+}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Source Serif 4",Georgia,"Times New Roman",serif;font-size:17px;line-height:1.55;font-variant-numeric:tabular-nums}
+a{color:var(--blue);text-decoration-thickness:1px;text-underline-offset:3px}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.wrap{max-width:74ch;margin:0 auto;padding:56px 24px 96px}
+h1,h2,h3{font-family:Archivo,"Helvetica Neue",Arial,sans-serif;text-wrap:balance;margin:0}
+h1{font-size:clamp(34px,6vw,52px);font-weight:800;font-variation-settings:"wdth" 118;line-height:1.02;letter-spacing:-.01em}
+h2{font-size:24px;font-weight:700;font-variation-settings:"wdth" 110;margin-top:64px;padding-top:18px;border-top:2px solid var(--ink)}
+h3{font-size:19px;font-weight:700;margin-top:28px}
+.eyebrow{font-family:Archivo,sans-serif;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.lede{font-size:20px;line-height:1.45;margin:18px 0 0;color:var(--ink-2)}
+p{margin:14px 0}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.86em}
+code{background:var(--panel);padding:1px 5px;border-radius:3px}
+ul{padding-left:1.2em;margin:10px 0}
+li{margin:4px 0}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:18px 28px;margin-top:20px}
+.fact{border-top:1px solid var(--rule);padding-top:10px}
+.fact b{font-family:Archivo,sans-serif;font-size:15px;display:block;margin-bottom:4px}
+.fact p{margin:0;font-size:15.5px;color:var(--ink-2)}
+@media (max-width:640px){.facts{grid-template-columns:1fr}}
+figure{margin:24px 0 0}
+figcaption{font-size:14px;color:var(--muted);margin-top:8px}
+.chart{position:relative;overflow-x:auto}
+.chart svg{display:block;width:100%;max-width:680px;height:auto;font-family:Archivo,sans-serif}
+.chart .axis-label{font-size:12px;fill:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.chart .tick{font-size:11px;fill:var(--muted)}
+.chart .lbl{font-size:13px;fill:var(--ink);font-weight:600}
+.chart .grid{stroke:var(--grid);stroke-width:1}
+.chart .ax{stroke:var(--rule);stroke-width:1.5}
+.chart .pt{cursor:pointer;stroke:var(--bg);stroke-width:2}
+.chart .pt.reco{fill:var(--c-reco)}
+.chart .pt.alt{fill:var(--c-alt)}
+.chart .hit{fill:transparent}
+.legend{display:flex;gap:18px;font-family:Archivo,sans-serif;font-size:13px;color:var(--ink-2);margin-top:6px}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.legend .r::before{background:var(--c-reco)}
+.legend .a::before{background:var(--c-alt)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-family:Archivo,sans-serif;font-size:13px;padding:6px 9px;border-radius:4px;max-width:260px;line-height:1.35;display:none}
+details{margin-top:10px}
+summary{cursor:pointer;font-family:Archivo,sans-serif;font-size:14px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:15px;margin-top:10px}
+th,td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-family:Archivo,sans-serif;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.n{text-align:right;padding-right:16px}
+.tblwrap{overflow-x:auto}
+.reco{background:var(--panel);border-left:4px solid var(--accent);padding:18px 22px;margin-top:22px}
+.reco h3{margin-top:0}
+.prop{margin-top:56px}
+.prop header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.rank{font-family:Archivo,sans-serif;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink)}
+.prop h3{font-size:26px;font-variation-settings:"wdth" 112;margin-top:0}
+.pitch{font-style:italic;font-size:18px;color:var(--ink-2);margin:6px 0 16px}
+.spec{display:grid;grid-template-columns:10.5rem 1fr;gap:0;border-top:1px solid var(--rule)}
+.spec dt{font-family:Archivo,sans-serif;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:12px 12px 12px 0;border-bottom:1px solid var(--rule)}
+.spec dd{margin:0;padding:11px 0 12px;border-bottom:1px solid var(--rule);font-size:16px}
+.spec dd ul{margin:0}
+.spec dd p{margin:0 0 6px}
+@media (max-width:560px){.spec{grid-template-columns:1fr}.spec dt{padding-bottom:0;border-bottom:0}.spec dd{padding-top:4px}}
+.hours{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:15px}
+.hours b{font-family:"JetBrains Mono",monospace;font-weight:600;font-size:14px;text-align:right}
+.warn{background:var(--warn-bg);color:var(--warn-ink);padding:12px 16px;font-size:15.5px;margin-top:16px}
+.warn b{font-family:Archivo,sans-serif}
+.src{font-size:14.5px;color:var(--ink-2)}
+.src li{margin:5px 0;overflow-wrap:anywhere}
+.stat{display:flex;gap:28px;flex-wrap:wrap;margin-top:22px;font-family:Archivo,sans-serif}
+.stat div{font-size:13px;color:var(--muted)}
+.stat div b{display:block;font-size:22px;color:var(--ink);font-weight:700;font-variation-settings:"wdth" 110}
+@media (prefers-reduced-motion:no-preference){.pt{transition:r .12s ease}.pt:hover{r:9}}
+</style>
+
+<main class="wrap">
+  <div class="eyebrow">goNEON take-home · research report · 7 September 2026</div>
+  <h1>Six overnight builds, above ground</h1>
+  <p class="lede">Which agentic-planning MVP to build in one Claude Code or Codex run for the goNEON Platform &amp; Ecosystem Owner exercise. Ranked on demo impact against build risk, with the verified data, rules, and prior art each one stands on.</p>
+  <div class="stat">
+    <div><b>105</b>agents run</div>
+    <div><b>23</b>sources fetched</div>
+    <div><b>23</b>claims confirmed</div>
+    <div><b>2</b>claims refuted</div>
+    <div><b>7</b>claims dropped on budget</div>
+  </div>
+
+  <h2>What the research changed about the brief</h2>
+  <p>The brief describes goNEON as a utility-network company and gives sewer, power line, and tree examples. Public sources tell a different story, and it works in your favour: an above-ground MVP is closer to their real product than the brief's framing suggests.</p>
+  <div class="facts">
+    <div class="fact"><b>The company is goNEON Agentic Systems AG</b><p>ETH Zürich spin-off, CEO Raphael Eder, CTO Lukas Ballo. Live site is <a href="https://goneon.city/">goneon.city</a>; goneon.io returns 404. Venture Kick funding reported by Tech.eu on 20 July 2026.</p></div>
+    <div class="fact"><b>Their product is a chat agent over a 3D map</b><p>The N! demo at <a href="https://try.goneon.city/">try.goneon.city</a> takes prompts like "Redesign parking spots with 2.5 m width", regenerates geometry, and shows Valid / Invalid / Safety margin / Remaining road width layers with a compare mode. That shape is the template to copy.</p></div>
+    <div class="fact"><b>Every public use case is above ground</b><p>Lane-level network scenarios, parking and curb compliance, cycling corridors scored on directness, gradient, turning angles and traffic exposure, loading-zone inventories, sight-triangle permit checks. No sewer, water, or district heating anywhere.</p></div>
+    <div class="fact"><b>The CTO's own toolkit is open source</b><p><a href="https://github.com/lukasballo/snman">SNMan</a> (MIT) reallocates road space on OSM streets under design rules while keeping motorised traffic connected. Whole-city runs take hours, so it is a reference and a "next step" engine, not a drop-in.</p></div>
+  </div>
+  <p>Two more findings shape every proposal below. First, the reference architecture that matters is a small set of deterministic, well-typed tools with domain rules injected, not a free-form code sandbox. GISclaw's authors found agent success bounded more by tool design than by model reasoning, and GISAgentBench reports the best agent completing only about a third of realistic GIS tasks. Second, your existing scaffold in this repo already speaks the right dialect: FastAPI, Shapely in LV95 metres, swisstopo heights, canton Zürich WFS, the city tree cadastre, and an A* least-cost alignment router. Zürich is also goNEON's home city and the setting of their demo.</p>
+
+  <h2>Ranking</h2>
+  <p>Demo impact is how strongly a two-minute video lands with Lukas and Raphael. Build risk is the chance that a single autonomous run does not reach an end-to-end usable state by morning. Rules and data marked verified were fetched live on 7 September 2026.</p>
+  <figure>
+    <div class="chart" id="chart">
+      <svg viewBox="0 0 680 420" role="img" aria-labelledby="chart-title">
+        <title id="chart-title">Six proposals plotted by build risk against demo impact</title>
+        <g id="gridlines"></g>
+        <line class="ax" x1="70" y1="360" x2="650" y2="360"/>
+        <line class="ax" x1="70" y1="30" x2="70" y2="360"/>
+        <text class="axis-label" x="360" y="405" text-anchor="middle">Build risk in one run →</text>
+        <text class="axis-label" x="-195" y="22" transform="rotate(-90)" text-anchor="middle">Demo impact ↑</text>
+        <g id="ticks"></g>
+        <g id="points"></g>
+      </svg>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div class="legend"><span class="r">Recommended build</span><span class="a">Alternatives</span></div>
+    <figcaption>Scores are the analyst's judgement built on the verified findings, on a 0 to 10 scale. Hover a point for the reason.</figcaption>
+    <details><summary>Table view of the ranking</summary>
+      <div class="tblwrap"><table>
+        <thead><tr><th>Rank</th><th>Proposal</th><th class="n">Risk</th><th class="n">Impact</th><th>Why it sits there</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Clearance</td><td class="n">5</td><td class="n">9</td><td>3D corridor conflicts are the most cinematic; your A* router already exists; building heights are sparse.</td></tr>
+          <tr><td>2</td><td>Canopy</td><td class="n">3</td><td class="n">8.5</td><td>Live tree WFS with CORS, three citable numbers, pure 2D math. Lowest risk of all.</td></tr>
+          <tr><td>3</td><td>Rulebook</td><td class="n">5.5</td><td class="n">7.5</td><td>Strongest platform story; PDF extraction is the flaky part. Best as the hook on 1 or 2.</td></tr>
+          <tr><td>4</td><td>Corridor</td><td class="n">7</td><td class="n">7.5</td><td>Most on-brand, but routing quality, gradient data, and width data all add risk.</td></tr>
+          <tr><td>5</td><td>One Street</td><td class="n">8.5</td><td class="n">9.5</td><td>Trees against overhead lines is a great story, but it is two data domains in one night.</td></tr>
+          <tr><td>6</td><td>Kerbside</td><td class="n">4</td><td class="n">5</td><td>EV charger siting rules were fetched but not verified; the demo is a heat map, not geometry.</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+  </figure>
+
+  <div class="reco">
+    <h3>Recommendation: build Clearance, ship Rulebook as its ecosystem hook, keep Canopy as the fallback</h3>
+    <p>Clearance reuses the alignment router and Swiss data layer you already wrote, so the run starts from working geometry rather than a blank repo. It is the only proposal with a natural 3D "wow" moment: extruded buildings turning red inside a protective strip, then the line bending clear. Rulebook turns its clearance table into editable, attributed rule packs, which is the exact vocabulary goNEON uses for its own product and the thing a third party would extend.</p>
+    <p>Set one checkpoint. If by roughly hour five the corridor check is not drawing conflicts on real OSM lines, switch the same agent loop and UI to Canopy. The tools, rule schema, and export format are shared, so the switch costs the engine only.</p>
+  </div>
+
+  <h2>The six proposals</h2>
+
+  <section class="prop" id="clearance">
+    <header><span class="rank">Rank 1</span><h3>Clearance</h3></header>
+    <p class="pitch">Drop a 110 kV line on the map, see every building and tree inside its protective strip, then let the agent bend it clear.</p>
+    <dl class="spec">
+      <dt>60-second demo</dt><dd><p>Pick a real overhead line at the edge of Zürich. Type "Show the protective strip for this line as an E.DIS 110 kV standard design". A 46 m corridor sweeps along the route; buildings inside rise in red with their height. Type "Realign to clear the school, at most two new angle towers". The router redraws the line, the compare panel shows +11 % length and 0 conflicts. Export GeoJSON.</p></dd>
+      <dt>Agent tools</dt><dd><ul class="mono"><li>fetch_lines(bbox) → OSM power=line and minor_line with voltage and tower nodes</li><li>corridor(line_id, ruleset) → protective strip polygon</li><li>find_conflicts(corridor) → buildings, trees, masts with reasons</li><li>realign(line_id, constraints) → new alignment via least-cost A*</li><li>score(alignments) → length, angle towers, conflicts</li><li>fly_to, toggle_layer, compare</li></ul></dd>
+      <dt>Data</dt><dd><p><b>Verified:</b> OSM separates overhead from underground cleanly. power=line and power=minor_line both imply overhead; underground is power=cable. Only about 0.1 % of line objects carry a location tag, so a query excluding location=underground returns more than 99.8 % overhead lines. Overture buildings carry optional height, num_floors, min_height and roof_height, and these survive the DuckDB to tippecanoe PMTiles pipeline for MapLibre fill-extrusion.</p><p><b>From your scaffold, not re-verified:</b> canton Zürich cadastral land cover and objects, swisstopo heights.</p></dd>
+      <dt>Rules</dt><dd><p><b>Verified, E.DIS Netz guideline (January 2022, based on DIN EN 50341):</b> 110 kV standard protective strip of 46 m, 23 m each side of the axis, kept free of buildings; woody plants inside limited to 3.0 m final height; trees outside placed so they cannot fall into the line; 15 m planting-free radius around each mast foundation.</p><p>These are one operator's standard-design values, so encode them as an editable rule pack with source attribution and an operator selector, never as constants.</p></dd>
+      <dt>Engine</dt><dd>Buffer and intersection in Shapely on LV95 metres. Realignment uses the A* raster router already in <code>server/engines/route.py</code>, with the corridor width as the impassable buffer around buildings.</dd>
+      <dt>Wow visual</dt><dd>MapLibre 3D extrusions from a static PMTiles file, corridor drawn as an animated sweep, conflict counter ticking down as the realignment is drawn live, reasoning trace streaming beside the map.</dd>
+      <dt>Ecosystem hook</dt><dd>Rule packs as JSON per grid operator, each field carrying its source and page. An MCP server exposing the same six tools so any agent client can plan against the engine. GeoJSON and KML export.</dd>
+      <dt>One-night plan</dt><dd><div class="hours"><b>1.0 h</b><span>Overpass fetch and tower nodes, PMTiles buildings for one bbox</span><b>2.0 h</b><span>Corridor, conflict, and score tools with tests on a fixture line</span><b>1.5 h</b><span>Wire realign to the existing A* router</span><b>2.0 h</b><span>MapLibre UI: layers, compare panel, streaming trace</span><b>1.5 h</b><span>Tool-calling loop, manual panel without API key</span><b>1.0 h</b><span>Deploy, instructions page, MCP server stub</span></div><p style="margin-top:8px">About nine hours of agent run time. Rulebook adds two.</p></dd>
+      <dt>Cut first</dt><dd>Realignment. A check that only flags conflicts and lets the planner drag the line is still end-to-end usable. Then cut 3D in favour of 2D footprints.</dd>
+      <dt>Risk</dt><dd>City-centre lines are underground cables, so demo on a suburban or rural bbox. Overture heights are sparse in many regions; fall back to num_floors × 3 m or a default.</dd>
+      <dt>Scores well because</dt><dd>It reproduces the N! pattern of parameter, constraint check, valid and invalid layers, compare. It is explainable in three sentences of geometry. Rule packs show how another operator's engineer extends it.</dd>
+    </dl>
+  </section>
+
+  <section class="prop" id="canopy">
+    <header><span class="rank">Rank 2</span><h3>Canopy</h3></header>
+    <p class="pitch">Draw a street, get every legal tree position and the shade those trees will cast in thirty years.</p>
+    <dl class="spec">
+      <dt>60-second demo</dt><dd><p>Type "Plant as many street trees as possible on Langstrasse, Berlin standard clearances, 8 m spacing". The agent loads existing trees, carriageway edges, cycle paths and building fronts, proposes positions, and the crowns grow to mature diameter. Invalid positions show red with the rule that killed them. "Compare 8 m and 10 m spacing" shows canopy cover for each. Export GeoJSON.</p></dd>
+      <dt>Agent tools</dt><dd><ul class="mono"><li>query_trees(bbox) → live cadastre features</li><li>street_edges(segment) → carriageway, cycle path, building front lines</li><li>candidate_sites(segment, spacing)</li><li>check_clearances(sites, rules) → valid / invalid with reason</li><li>canopy_gain(sites, species, years)</li><li>export_geojson</li></ul></dd>
+      <dt>Data</dt><dd><p><b>Verified live:</b> Berlin's tree cadastre WFS 2.0.0 at gdi.berlin.de serves 434,765 street trees as GeoJSON in EPSG:4326 with CORS enabled, each with species, genus, planting year, age, crown diameter, trunk circumference and height. About a fifth of records have missing crown diameter, so impute from species and age. Filter by bbox, never pull the full set.</p><p><b>From your scaffold, not re-verified:</b> Zürich Baumkataster WFS, so the same tool can run in goNEON's home city through a city adapter.</p></dd>
+      <dt>Rules</dt><dd><p><b>Verified, Berlin street-tree planting standard (September 2024, section 5.2):</b> at least 0.5 m from carriageway edge to trunk, mandatory; at least 0.25 m from trunk to cycle path, recommended; at least 1.5 m from mature crown edge to multi-storey buildings, recommended. Render mandatory and recommended differently.</p></dd>
+      <dt>Engine</dt><dd>Pure 2D buffers and intersections in Shapely. Mature crown diameter from a small species table. Shade as a shadow polygon offset by tree height for one sun position, if time allows.</dd>
+      <dt>Wow visual</dt><dd>Crowns animating from sapling to mature size, canopy percentage rising in the corner, a July afternoon shadow layer, side-by-side spacing scenarios.</dd>
+      <dt>Ecosystem hook</dt><dd>City adapters: one small class per WFS turns Berlin into Zürich or Munich. Species table as a plugin file. Same rule-pack format as Clearance. MCP server over the tools.</dd>
+      <dt>One-night plan</dt><dd><div class="hours"><b>1.0 h</b><span>WFS adapter with bbox paging, Overture footprints, OSM ways</span><b>2.0 h</b><span>Candidate sites, clearance check, canopy gain, tests</span><b>2.0 h</b><span>Map UI with growth animation and compare</span><b>1.5 h</b><span>Agent loop and manual panel</span><b>1.0 h</b><span>Deploy and instructions</span></div><p style="margin-top:8px">About eight hours. The safest build on the list.</p></dd>
+      <dt>Cut first</dt><dd>Shade. Then species imputation, using an 8 m default crown.</dd>
+      <dt>Risk</dt><dd>Low. The only live dependency is a public WFS that answered every probe on 7 September.</dd>
+      <dt>Scores well because</dt><dd>Works end to end with the least engine code. A planner understands it in one sentence. The rule numbers are real and cited, which answers "explain what it does" before the question is asked.</dd>
+    </dl>
+  </section>
+
+  <section class="prop" id="rulebook">
+    <header><span class="rank">Rank 3</span><h3>Rulebook</h3></header>
+    <p class="pitch">Feed the agent a planning standard as a PDF; it writes the rule pack and runs it on the map in the same minute.</p>
+    <dl class="spec">
+      <dt>60-second demo</dt><dd><p>Drop the Berlin tree standard or the E.DIS guideline onto the page. The agent extracts each distance with its page reference into a rule pack shown beside the PDF page, numbers highlighted. Move the 0.5 m slider to 0.75 m and the map re-validates instantly. Load a second pack and diff them.</p></dd>
+      <dt>Agent tools</dt><dd><ul class="mono"><li>extract_rules(pdf) → schema-constrained LLM call</li><li>validate_rules(pack) → schema and unit checks</li><li>apply_rules(features, pack) → valid / invalid with rule ids</li><li>diff_rules(a, b)</li><li>explain_rule(id) → quote and page</li></ul></dd>
+      <dt>Data</dt><dd>Whatever engine it sits on. The two verified PDFs above are the demo inputs and ship pre-extracted as fallbacks.</dd>
+      <dt>Rules</dt><dd>The rule schema is the product: subject, reference feature, minimum distance, mode (must or should), source document and page, operator or city scope.</dd>
+      <dt>Engine</dt><dd>One generic buffer-check runner over GeoJSON that both Clearance and Canopy already need. Rulebook is that runner with a schema and a PDF front door.</dd>
+      <dt>Wow visual</dt><dd>Split screen: the PDF page with highlighted numbers on the left, the map turning valid and invalid on the right as each rule lands.</dd>
+      <dt>Ecosystem hook</dt><dd>This is the platform story in one artifact. Each hackathon team submits a rule pack; a registry lists them with sources; the engine runs any of them. goNEON's own site describes its product as machine-readable design rules over a constraint-aware spatial model, so this speaks their language exactly.</dd>
+      <dt>One-night plan</dt><dd><div class="hours"><b>1.0 h</b><span>Rule schema, validator, two hand-checked packs</span><b>1.0 h</b><span>PDF extraction call with page citations</span><b>1.0 h</b><span>Split-screen UI and diff view</span></div><p style="margin-top:8px">Three hours on top of Clearance or Canopy. Not worth building alone.</p></dd>
+      <dt>Cut first</dt><dd>Live extraction. Keep the editable packs and the diff; show extraction only on the two known PDFs.</dd>
+      <dt>Risk</dt><dd>PDF extraction is the flaky step. A refuted claim in this research, voltage-tiered 10, 20, 30 m distances attributed to DIN EN 50341, is exactly the kind of number an extractor can hallucinate, so every extracted value must show its quote.</dd>
+      <dt>Scores well because</dt><dd>It is the clearest answer to "show how other people could build on it with you".</dd>
+    </dl>
+  </section>
+
+  <section class="prop" id="corridor">
+    <header><span class="rank">Rank 4</span><h3>Corridor</h3></header>
+    <p class="pitch">Three bike corridors between two points, scored the way goNEON scores them: directness, gradient, turning angles, traffic exposure.</p>
+    <dl class="spec">
+      <dt>60-second demo</dt><dd><p>Click two points in Zürich Kreis 4. The agent draws three alternative corridors, scores each on a small radar, and checks whether a 2 m lane fits each segment while keeping the remaining road width legal. "Prefer the flattest" re-weights and re-ranks. Export GeoJSON.</p></dd>
+      <dt>Agent tools</dt><dd><ul class="mono"><li>get_network(bbox) → OSM graph</li><li>alternatives(a, b, k) → k penalised shortest paths</li><li>score_corridor(path, weights)</li><li>check_width(segment, lane_config)</li><li>compare(paths)</li></ul></dd>
+      <dt>Data</dt><dd>OSM via Overpass or OSMnx. Gradient from swisstopo profiles, already wrapped in your scaffold's geo layer but not re-verified here. Traffic exposure from OSM highway class. Road widths from OSM are sparse.</dd>
+      <dt>Rules</dt><dd>Lane width and remaining road width thresholds as a rule pack. No verified Swiss or German cycling design values came out of this research, so they would be labelled as assumptions.</dd>
+      <dt>Engine</dt><dd>NetworkX penalised k-shortest paths plus four scoring functions. SNMan is the credible "next engine" for full road-space reallocation.</dd>
+      <dt>Wow visual</dt><dd>Three corridors drawing themselves in parallel, a street cross-section before and after, the radar re-shaping as weights change.</dd>
+      <dt>Ecosystem hook</dt><dd>Scoring functions as plugins with a weights file, and an SNMan integration path that the CTO will recognise.</dd>
+      <dt>One-night plan</dt><dd><div class="hours"><b>1.5 h</b><span>Graph fetch and simplification</span><b>2.5 h</b><span>Alternatives, scoring, width check</span><b>2.5 h</b><span>Map UI, radar, cross-section</span><b>1.5 h</b><span>Agent loop</span><b>1.0 h</b><span>Deploy</span></div><p style="margin-top:8px">About ten hours, with the most unknowns.</p></dd>
+      <dt>Cut first</dt><dd>Gradient, then the cross-section.</dd>
+      <dt>Risk</dt><dd>Routing quality on messy OSM graphs, DEM call latency, missing widths. It also invites the closest comparison with goNEON's real product, which cuts both ways.</dd>
+      <dt>Scores well because</dt><dd>It is literally one of their listed use cases and builds on the CTO's own research. Pick it if you want the vision video to land hardest and accept more build risk.</dd>
+    </dl>
+  </section>
+
+  <section class="prop" id="one-street">
+    <header><span class="rank">Rank 5</span><h3>One Street</h3></header>
+    <p class="pitch">Two rulebooks, one street: the tree agent and the line agent negotiate until nothing conflicts.</p>
+    <dl class="spec">
+      <dt>60-second demo</dt><dd><p>A suburban street with a distribution line overhead. The agent places trees, then flags every tree inside the corridor whose mature height exceeds 3 m, swaps in a small species or shifts it, keeps the 15 m radius around masts clear, and narrates each resolution.</p></dd>
+      <dt>Agent tools</dt><dd>The union of Clearance and Canopy plus <span class="mono">resolve_conflicts(sites, corridors)</span>.</dd>
+      <dt>Data and rules</dt><dd>Both verified sets above. The E.DIS 3 m height limit inside the strip is the rule that joins the two domains, and it is above ground on both sides.</dd>
+      <dt>Wow visual</dt><dd>Two constraint fields overlapping in different hatches, conflicts resolved one at a time with the reasoning trace, final state with zero red.</dd>
+      <dt>Ecosystem hook</dt><dd>Proof that rule packs compose. A third pack from any team slots into the same negotiation.</dd>
+      <dt>One-night plan</dt><dd>About twelve hours. Only reachable as a stretch if Clearance or Canopy is working by midnight.</dd>
+      <dt>Risk</dt><dd>High. Two live data domains and a resolution loop in one run is where autonomous builds stall with nothing shippable.</dd>
+    </dl>
+  </section>
+
+  <section class="prop" id="kerbside">
+    <header><span class="rank">Rank 6</span><h3>Kerbside</h3></header>
+    <p class="pitch">Where can the city put EV chargers without blocking sight lines, trees, or loading zones?</p>
+    <dl class="spec">
+      <dt>60-second demo</dt><dd>Pick a district; parking bays light up by a demand proxy from nearby points of interest; the agent proposes sites and rejects those in conflict with trees, crossings, or loading zones.</dd>
+      <dt>Data and rules</dt><dd>OSM parking lanes and existing charging stations, the tree cadastre. The KEA-BW municipal charging guideline was fetched but none of its rules survived verification, so siting rules would be assumptions.</dd>
+      <dt>Why last</dt><dd>The demo is a heat map rather than geometry, the rules are unverified, and the ecosystem hook is weaker. Keep it as a hackathon challenge idea for the vision video rather than the MVP.</dd>
+    </dl>
+  </section>
+
+  <h2>Architecture shared by all six</h2>
+  <p>Keep the model as orchestrator and explainer, never as the geometry engine. Every tool is deterministic, typed, and returns a short observation the model can reason about. Rule packs are data with attribution, loaded at runtime. Outputs are map layers and GeoJSON, not CAD, matching what goNEON itself delivers.</p>
+  <ul>
+    <li><b>Backend:</b> your FastAPI and Shapely scaffold in LV95, one container. Tool schemas shared between the HTTP API, the agent loop, and an MCP server so the same six tools serve planners, the chat, and third-party agents.</li>
+    <li><b>Frontend:</b> MapLibre with PMTiles read straight from static hosting. Protomaps documents this through addProtocol; the host needs Range requests and CORS, no tile server.</li>
+    <li><b>Agent loop:</b> Anthropic or OpenAI tool calling with streamed reasoning shown beside the map. Your scaffold's manual panel, which works without any key, is exactly the "not a solo demo" safeguard the brief rewards.</li>
+    <li><b>Prior art to crib the UI from:</b> OpenAssistant (GeoDaCenter, MIT, alpha) for the chat-plus-tools pattern over the Vercel AI SDK. Its routing tool is really Mapbox and it has no engineering geometry, so borrow the pattern, not the package.</li>
+  </ul>
+  <div class="warn"><b>Not verified by this research:</b> hosting cost and rate limiting for 100 concurrent users, MCP server specifics, and the Zürich endpoints in your scaffold. Sensible defaults: one Fly.io or Railway container, the API key held server-side, a per-session token bucket and a daily cap, and the manual panel as the no-key path.</div>
+
+  <h2>Do not hardcode these</h2>
+  <ul>
+    <li><b>Refuted, 1 to 2 vote:</b> that DIN EN 50341-2-4 defines horizontal distances of 10 m up to 45 kV, 20 m up to 110 kV, 30 m above. The source was one project's compliance note, not the standard, which is paywalled.</li>
+    <li><b>Refuted, 0 to 3 vote:</b> that Overture ships five themes as GeoParquet filterable by bbox in DuckDB exactly as described. Re-check the current Overture docs before scripting the download.</li>
+    <li><b>Split vote, 2 to 1:</b> that tool design rather than model reasoning is the ceiling for GIS agents. One paper's self-evaluation; directionally useful, not a law.</li>
+  </ul>
+
+  <h2>Open questions worth ten minutes before you start</h2>
+  <ul>
+    <li>Does N! expose any API, export format, or rule file that the ecosystem hook should mirror? Nothing public was found either way.</li>
+    <li>Which 380 kV and 220 kV protective strips do Swissgrid or Axpo publish, so the Clearance demo in Zürich uses a Swiss operator's pack rather than a Brandenburg one?</li>
+    <li>Are the Zürich WFS layers in your scaffold answering with CORS today? The Berlin endpoints were probed; the Swiss ones were not.</li>
+  </ul>
+
+  <h2>Sources the findings rest on</h2>
+  <ul class="src">
+    <li>goNEON site and demo: <a href="https://goneon.city/">goneon.city</a>, <a href="https://try.goneon.city/">try.goneon.city</a>, <a href="https://sud26.startupdays.ch/participations/741563">Startup Days 2026 profile</a></li>
+    <li>SNMan: <a href="https://github.com/lukasballo/snman">github.com/lukasballo/snman</a>, Ballo, Raubal and Axhausen 2024, Journal of Cycling and Micromobility Research</li>
+    <li>Agentic GIS prior art: <a href="https://github.com/geodacenter/openassistant">OpenAssistant</a>, <a href="https://arxiv.org/html/2603.26845v1">GISclaw, arXiv 2603.26845</a>, GISAgentBench, arXiv 2608.01645</li>
+    <li>Berlin trees: <a href="https://gdi.berlin.de/services/wfs/baumbestand">WFS baumbestand</a>, <a href="https://daten.berlin.de/datensaetze/baumbestand-berlin-stra%C3%9Fenb%C3%A4ume-wfs">dataset page</a>; <a href="https://www.berlin.de/sen/uvk/_assets/natur-gruen/stadtgruen/stadtbaeume/strassen-und-parkbaeume/baumpflege/standards-pflanzung-strassenbaeume.pdf">Berlin planting standard PDF</a></li>
+    <li>Overhead lines: OSM wiki <a href="https://wiki.openstreetmap.org/wiki/Tag:power=line">power=line</a>, <a href="https://wiki.openstreetmap.org/wiki/Tag:power=minor_line">power=minor_line</a>, <a href="https://wiki.openstreetmap.org/wiki/Tag:power=cable">power=cable</a>; E.DIS Netz guideline via Amt Neuburg and bauleitplaene-mv.de</li>
+    <li>Map stack: <a href="https://docs.overturemaps.org/schema/reference/buildings/building/">Overture building schema</a>, <a href="https://docs.protomaps.com/pmtiles/maplibre">Protomaps PMTiles for MapLibre</a>, <a href="https://leafmap.org/maplibre/3d_pmtiles/">leafmap 3D PMTiles example</a></li>
+    <li>Hosting patterns, fetched but not verified against 100-user load: Railway Claude Agent SDK guide, Cloudflare remote MCP guide, Vercel LLM streaming guide, Upstash serverless rate limiting</li>
+  </ul>
+</main>
+
+<script>
+(function(){
+  var data=[
+    {n:"Clearance",r:5,i:9,c:"reco",why:"3D corridor conflicts, reuses your A* router. Heights are sparse."},
+    {n:"Canopy",r:3,i:8.5,c:"alt",why:"Live tree WFS with CORS, three cited numbers, 2D math. Lowest risk."},
+    {n:"Rulebook",r:5.5,i:7.5,c:"alt",why:"Strongest platform story. PDF extraction is the flaky step."},
+    {n:"Corridor",r:7,i:7.5,c:"alt",why:"Most on-brand. Routing, gradient and width data add risk."},
+    {n:"One Street",r:8.5,i:9.5,c:"alt",why:"Trees against lines is a great story. Two domains in one night."},
+    {n:"Kerbside",r:4,i:5,c:"alt",why:"Rules unverified, demo is a heat map."}
+  ];
+  var x0=70,x1=650,y0=360,y1=30;
+  function sx(v){return x0+(v/10)*(x1-x0)}
+  function sy(v){return y0-(v/10)*(y0-y1)}
+  var NS="http://www.w3.org/2000/svg";
+  function el(t,a){var e=document.createElementNS(NS,t);for(var k in a)e.setAttribute(k,a[k]);return e}
+  var g=document.getElementById("gridlines"),t=document.getElementById("ticks"),p=document.getElementById("points");
+  for(var v=0;v<=10;v+=2){
+    g.appendChild(el("line",{class:"grid",x1:x0,y1:sy(v),x2:x1,y2:sy(v)}));
+    var ty=el("text",{class:"tick",x:x0-8,y:sy(v)+4,"text-anchor":"end"});ty.textContent=v;t.appendChild(ty);
+    var tx=el("text",{class:"tick",x:sx(v),y:y0+16,"text-anchor":"middle"});tx.textContent=v;t.appendChild(tx);
+  }
+  var tip=document.getElementById("tip"),chart=document.getElementById("chart");
+  var offsets={"Clearance":[12,-10],"Canopy":[12,-10],"Rulebook":[12,18],"Corridor":[12,-10],"One Street":[-12,-12],"Kerbside":[12,4]};
+  data.forEach(function(d){
+    var cx=sx(d.r),cy=sy(d.i);
+    var hit=el("circle",{class:"hit",cx:cx,cy:cy,r:18});
+    var pt=el("circle",{class:"pt "+d.c,cx:cx,cy:cy,r:7});
+    var o=offsets[d.n];
+    var lb=el("text",{class:"lbl",x:cx+o[0],y:cy+o[1],"text-anchor":o[0]<0?"end":"start"});lb.textContent=d.n;
+    function show(ev){tip.style.display="block";tip.innerHTML="<b>"+d.n+"</b> · risk "+d.r+", impact "+d.i+"<br>"+d.why;
+      var rect=chart.getBoundingClientRect();var px=ev.clientX-rect.left+14,py=ev.clientY-rect.top-10;
+      if(px+270>rect.width)px=ev.clientX-rect.left-280;tip.style.left=px+"px";tip.style.top=py+"px";}
+    function hide(){tip.style.display="none"}
+    [hit,pt].forEach(function(e){e.addEventListener("mousemove",show);e.addEventListener("mouseleave",hide);});
+    p.appendChild(hit);p.appendChild(pt);p.appendChild(lb);
+  });
+})();
+</script>

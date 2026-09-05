@@ -1,0 +1,24 @@
+{
+  "notes": "Mature crown diameters and heights are typical nursery/literature values for street conditions, rounded. They drive the crown growth model crown_d(t) = sapling + (mature - sapling) * (1 - exp(-t / tau)). Treat as approximate and editable.",
+  "species": [
+    {"id": "tilia_cordata", "name_lat": "Tilia cordata 'Greenspire'", "name_de": "Winterlinde", "name_en": "Small-leaved lime", "size_class": "medium", "mature_crown_d_m": 10.0, "mature_height_m": 18.0, "growth_tau_years": 15.0, "notes": "Classic Berlin/Zürich avenue tree."},
+    {"id": "acer_platanoides", "name_lat": "Acer platanoides", "name_de": "Spitzahorn", "name_en": "Norway maple", "size_class": "medium", "mature_crown_d_m": 12.0, "mature_height_m": 20.0, "growth_tau_years": 14.0},
+    {"id": "platanus_hispanica", "name_lat": "Platanus × hispanica", "name_de": "Platane", "name_en": "London plane", "size_class": "large", "mature_crown_d_m": 20.0, "mature_height_m": 28.0, "growth_tau_years": 18.0, "notes": "Needs wide streets; largest canopy per tree."},
+    {"id": "gleditsia_triacanthos", "name_lat": "Gleditsia triacanthos 'Skyline'", "name_de": "Lederhülsenbaum", "name_en": "Honey locust", "size_class": "medium", "mature_crown_d_m": 10.0, "mature_height_m": 15.0, "growth_tau_years": 13.0, "notes": "Light crown, heat tolerant."},
+    {"id": "quercus_cerris", "name_lat": "Quercus cerris", "name_de": "Zerreiche", "name_en": "Turkey oak", "size_class": "large", "mature_crown_d_m": 15.0, "mature_height_m": 25.0, "growth_tau_years": 20.0},
+    {"id": "sophora_japonica", "name_lat": "Styphnolobium japonicum", "name_de": "Schnurbaum", "name_en": "Pagoda tree", "size_class": "large", "mature_crown_d_m": 15.0, "mature_height_m": 18.0, "growth_tau_years": 16.0},
+    {"id": "celtis_australis", "name_lat": "Celtis australis", "name_de": "Zürgelbaum", "name_en": "European nettle tree", "size_class": "medium", "mature_crown_d_m": 12.0, "mature_height_m": 18.0, "growth_tau_years": 16.0, "notes": "Drought tolerant, often on climate-tree lists."},
+    {"id": "carpinus_fastigiata", "name_lat": "Carpinus betulus 'Fastigiata'", "name_de": "Säulen-Hainbuche", "name_en": "Pyramidal hornbeam", "size_class": "small", "mature_crown_d_m": 6.0, "mature_height_m": 12.0, "growth_tau_years": 14.0, "notes": "Narrow crown for narrow sidewalks."},
+    {"id": "acer_campestre", "name_lat": "Acer campestre 'Elsrijk'", "name_de": "Feldahorn", "name_en": "Field maple", "size_class": "small", "mature_crown_d_m": 7.0, "mature_height_m": 10.0, "growth_tau_years": 13.0},
+    {"id": "prunus_avium_plena", "name_lat": "Prunus avium 'Plena'", "name_de": "Vogelkirsche", "name_en": "Double-flowered wild cherry", "size_class": "small", "mature_crown_d_m": 8.0, "mature_height_m": 10.0, "growth_tau_years": 12.0},
+    {"id": "ginkgo_biloba", "name_lat": "Ginkgo biloba", "name_de": "Ginkgo", "name_en": "Ginkgo", "size_class": "medium", "mature_crown_d_m": 9.0, "mature_height_m": 20.0, "growth_tau_years": 18.0},
+    {"id": "corylus_colurna", "name_lat": "Corylus colurna", "name_de": "Baumhasel", "name_en": "Turkish hazel", "size_class": "medium", "mature_crown_d_m": 10.0, "mature_height_m": 15.0, "growth_tau_years": 15.0}
+  ],
+  "genus_crown_d_m": {
+    "Tilia": 10.0, "Acer": 11.0, "Platanus": 20.0, "Gleditsia": 10.0, "Quercus": 15.0, "Styphnolobium": 15.0, "Sophora": 15.0,
+    "Celtis": 12.0, "Carpinus": 8.0, "Prunus": 8.0, "Ginkgo": 9.0, "Corylus": 10.0, "Fraxinus": 14.0, "Robinia": 12.0,
+    "Aesculus": 14.0, "Betula": 8.0, "Ulmus": 14.0, "Populus": 14.0, "Salix": 12.0, "Pinus": 9.0, "Picea": 7.0, "Fagus": 16.0,
+    "Malus": 6.0, "Pyrus": 7.0, "Sorbus": 6.0, "Crataegus": 5.0, "Alnus": 9.0, "Magnolia": 6.0, "Liquidambar": 10.0, "Zelkova": 12.0
+  },
+  "default_crown_d_m": 8.0
+}
