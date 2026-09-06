@@ -2,6 +2,8 @@
 
 Rules are data (``rules/*.json``) with attribution; this module only measures
 distances in the street's metric CRS and compares them with the rule values.
+An independent geometry safeguard excludes positions already occupied by a
+mapped trunk, without treating numerical coincidence as a clearance standard.
 ``PreparedContext`` wraps a ``StreetContext`` with spatial indexes so that a
 few thousand cadastre polygons can be queried per site in microseconds.
 """
@@ -161,6 +163,7 @@ class PreparedContext:
         self.sidewalks = LayerIndex(ctx.sidewalks)
         self.trees = PointIndex([t.pt for t in ctx.existing_trees])
         self.junctions = PointIndex(list(ctx.junctions))
+        self.junction_stations = [ctx.axis.project(p) for p in ctx.junctions]
         self.plantable_empty = ctx.plantable is None or ctx.plantable.is_empty
         self._plantable = None if self.plantable_empty else ctx.plantable.buffer(PLANTABLE_TOLERANCE_M)
         if self._plantable is not None:
@@ -306,19 +309,62 @@ def verdict_for(results: list[RuleResult]) -> Verdict:
     return "valid"
 
 
+def _occupied_tree_position(pt: Point, prep: PreparedContext) -> RuleResult:
+    """Reject duplicate mapped trunk positions independently of editable clearances.
+
+    MEASURE_EPS absorbs floating-point geometry noise; it is not a planting
+    distance. The wider existing-tree spacing recommendation remains editable.
+    """
+    distance = prep.trees.min_distance(pt)
+    occupied = distance is not None and distance <= MEASURE_EPS
+    return RuleResult(
+        rule_id="occupied_tree_position",
+        label="Position occupied by an existing tree",
+        mode="must",
+        required_m=None,
+        measured_m=distance,
+        passed=not occupied,
+        basis=prep.basis("existing_trees"),
+        assumption=True,
+        note=("This position coincides with a mapped existing trunk and is excluded. "
+              "Geometry safeguard using numerical tolerance, not a cited clearance standard."
+              if occupied else None),
+    )
+
+
 def evaluate_site(pt: Point, ctx: StreetContext, pack: RulePack, sp: Species, params: PlanParams,
                   *, normal: tuple[float, float] | None = None,
+                  station_m: float | None = None,
                   prepared: PreparedContext | None = None) -> tuple[Verdict, list[RuleResult], list[str]]:
     """Evaluate every enabled rule of ``pack`` for a trunk at ``pt``.
 
     ``normal`` is the unit vector across the street at the site (used for the
     sidewalk width probe); when omitted it is derived from the axis. Pass a
     ``PreparedContext`` built from ``ctx`` when evaluating many sites.
-    Returns the verdict, one RuleResult per enabled rule and the collected notes.
+    Returns the verdict, one RuleResult per enabled rule plus the occupied-trunk
+    geometry safeguard, and the collected notes.
     """
     prep = prepared if prepared is not None and prepared.ctx is ctx else PreparedContext(ctx)
     if normal is None:
         _, normal = axis_frame(ctx.axis, ctx.axis.project(pt))
     results = [_evaluate_rule(rule, pt, prep, sp, params, normal) for rule in pack.rules if rule.enabled]
+    results.append(_occupied_tree_position(pt, prep))
+    # A side-street can send the carriageway ray far sideways. Measure the
+    # station as well as trunk distance so this cannot escape the exclusion.
+    station = ctx.axis.project(pt) if station_m is None else station_m
+    separation = min((abs(station - s) for s in prep.junction_stations), default=None)
+    distance = prep.junctions.min_distance(pt)
+    if distance is not None:
+        separation = min(separation, distance)
+    results.append(RuleResult(
+        rule_id="junction_exclusion", label="Junction and crossing exclusion",
+        mode="must", required_m=10.0,
+        measured_m=None if separation is None else round(separation, 2),
+        passed=separation is None or separation + MEASURE_EPS >= 10.0,
+        basis=prep.basis("junctions"), assumption=True,
+        note=("No junctions mapped; exclusion could not be checked." if separation is None else
+              "Mandatory 10 m planning exclusion around mapped junctions and crossings, measured along the street or to the trunk. Not a surveyed sight triangle."
+              if separation < 10.0 else None),
+    ))
     notes = list(dict.fromkeys(r.note for r in results if r.note))
     return verdict_for(results), results, notes

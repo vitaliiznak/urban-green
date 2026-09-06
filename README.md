@@ -1,6 +1,6 @@
 # Allee
 
-**Name a street. Get every legal tree position under a cited rule pack, and the canopy those trees will cast in 30 years.**
+**Name a street. Explore proposed tree positions under a cited rule pack and estimate their canopy over 30 years.**
 
 Allee is an agentic street-tree planner built as an overnight MVP for the goNEON
 "Platform & Ecosystem Owner" exercise. A planner picks a city and a street (or draws one),
@@ -23,9 +23,62 @@ cp .env.example .env            # add OPENAI_API_KEY or ANTHROPIC_API_KEY to ena
 .venv/bin/python -m pytest -q   # unit + API tests, no network needed
 ```
 
-Open http://localhost:8000. The page loads Zürich, Langstrasse, plans trees with the
-defaults, and shows the crowns at year 30. Drag the year slider, toggle shade, change a rule,
-plan again, compare, export.
+Open http://localhost:8000. Choose a city, then click a street on the map, enter a
+street name, select an example, or use **Draw street** to mark a route. No street is loaded automatically.
+Map selection snaps to an actual OpenStreetMap road within 30 m and creates a plan.
+Use **Select street on map** to pick another street. Escape cancels selection;
+at a distant zoom, the first click zooms in. The offline demo uses name/drawing only.
+Drawing supports **Undo last point**, **Finish drawing** and **Cancel drawing**.
+Follow **Choose a street → Adjust the trees → Review your plan → Compare temperatures**.
+Expand the street selector to change location; adjust spacing, street sides or species, then
+apply your changes to create another plan. The result explains the marker colors: green means no evaluated rule failed,
+amber means a recommendation is not met, and red means a required rule failed.
+Amber positions remain in the proposed count and canopy estimate; red positions
+are excluded. The reason list separates amber and excluded counts and opens an
+example position with its measured and recommended clearances. An independent
+geometry safeguard excludes positions that coincide with an existing mapped trunk;
+it uses numerical tolerance, not a new planting-clearance standard. A mandatory
+10 m exclusion around mapped junctions and crossings also applies, even with
+editable rules disabled. It checks both distance along the street and trunk
+distance, preventing a wide crossing from pushing a candidate sideways past the
+check. This is a conservative planning default, not a surveyed sight triangle;
+unmapped crossings still need site review. Excluded positions add no canopy,
+shade or cooling. Use the map's
+year slider and shade toggle to explore growth, or compare at least two plans for
+the same street and download GeoJSON. The comparison keeps the selected plan and
+up to five recent alternatives, with further metrics under an expandable section.
+API and assistant comparisons label streets and sources and do not rank different
+street contexts against one another.
+
+More planting options, planting rules and map layers expand when needed. Open
+**Ask the planning assistant** for chat. Explanation requests use a read-only
+`inspect_plan` tool, with actions available in an expandable trace. On mobile, **Show this plan on the map**
+and **Back to settings** move between planning and the map. Plans are kept in the
+page until refresh; data sources and estimation warnings remain available under
+the selected street. The existing-tree card shows the actual source and count.
+For Zürich, a cached OSM fallback is retried against the city register once when
+loading a named street. If the register is still unavailable, the fallback stays
+explicit and **Retry Zürich tree register** reloads the same street line and
+creates a new plan. Distance from existing trees is currently a 5 m recommendation,
+so conflicting candidates remain amber rather than being excluded.
+
+**Compare temperatures** is a manual, exploratory air-temperature comparison of
+existing trees versus the selected plan. Enter a reference or measured temperature
+(the default 30°C is illustrative), tree age, and summer time/date. The card shows
+the model's central value and sensitivity range, plus a separate before/after
+tree-shade comparison. **Show this plan's shade on the map** applies that year and
+time. Editing inputs or selecting another plan clears the previous comparison.
+The model transfers a published Tacoma canopy association; it is not calibrated
+for the selected street and is not a local forecast or pavement-temperature model.
+See [temperature method and limitations](docs/temperature-method.md).
+
+In **Adjust the trees**, species are listed from narrower to wider crowns. The
+**Mature crown diameter** slider also lets you test a custom 2–25 m crown. This
+is a scenario assumption; it does not change the species' height or guarantee
+that a real tree will stay that size. Choosing a species restores its usual
+crown diameter. Apply changes to recalculate crown clearances, growth, canopy,
+shade and temperature estimates. Each saved plan retains its own size, shown
+in the plan comparison; junction exclusions still apply to small trees.
 
 Try the API: `BASE=http://localhost:8000 ./examples/curl.sh` (needs `jq`).
 OpenAPI UI: http://localhost:8000/docs.
@@ -34,7 +87,7 @@ OpenAPI UI: http://localhost:8000/docs.
 
 | Action | Where | What happens |
 |---|---|---|
-| Load a street | city select + name, or **Draw street** | adapter fetches carriageway, sidewalks, buildings, cycle paths, junctions, existing trees for the corridor (axis ± 15 m) |
+| Load a street | click a street, city + name, or **Draw street** | adapter fetches carriageway, sidewalks, buildings, cycle paths, junctions, existing trees for the corridor (axis ± 15 m) |
 | Plan trees | Plan card or the agent | candidate trunks at the chosen spacing, offset from the carriageway edge; every candidate evaluated against the rule pack; **valid / conditional / invalid** |
 | Pack | mode = pack | greedy walk along the street: trees slide to the nearest legal position; gaps are reported with the rule that caused them |
 | Grow | year slider 0–30 | crowns grow with a species curve; canopy % of corridor, of street space, of sidewalk |
@@ -95,6 +148,7 @@ POST /api/street                      {city, query} or {city, line:[[lon,lat],..
 POST /api/plan                        {street_id, spacing_m, side, species_id, mode, ...} -> ScenarioResponse
 POST /api/canopy                      {scenario_id, years?}
 POST /api/shade                       {scenario_id, year, month, day, hour}
+POST /api/temperature                 {scenario_id, reference_air_c, year, month, day, hour}
 POST /api/compare                     {scenario_ids: [...]}
 GET  /api/scenarios/{id}              GET /api/scenarios/{id}/sites/{site_id}
 GET  /api/export/{id}.geojson
@@ -111,10 +165,10 @@ together. Rate limits per session and per day are set with `AGENT_TURNS_PER_HOUR
 The same tools for Claude Desktop, Claude Code or any MCP client:
 
 ```json
-{ "mcpServers": { "allee": { "command": "/path/to/.venv/bin/python", "args": ["-m", "server.mcp_server"], "cwd": "/path/to/allee" } } }
+{ "mcpServers": { "allee": { "command": "/path/to/.venv/bin/python", "args": ["-m", "server.mcp_server"], "cwd": "/path/to/allee" } } } }
 ```
 
-Tools: `load_street`, `plan_trees`, `explain_site`, `set_rule`, `canopy_projection`, `shade`,
+Tools: `load_street`, `plan_trees`, `inspect_plan`, `explain_site`, `set_rule`, `canopy_projection`, `shade`,
 `compare_scenarios`, `export_geojson`, `list_species`, `list_rules`.
 
 ## Deploy (Fly.io, one container)

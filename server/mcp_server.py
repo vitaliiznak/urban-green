@@ -38,9 +38,11 @@ async def load_street(city: str, query: str) -> str:
 
 @mcp.tool()
 async def plan_trees(spacing_m: float = 8.0, side: str = "both", species_id: str = "tilia_cordata", mode: str = "grid",
-                     offset_from_edge_m: Optional[float] = None, label: Optional[str] = None) -> str:
+                     offset_from_edge_m: Optional[float] = None, label: Optional[str] = None,
+                     crown_diameter_m: float | None = None) -> str:
     """Propose and evaluate tree positions on the loaded street; returns counts, top failing rules and 30-year canopy."""
     return await _call("plan_trees", spacing_m=spacing_m, side=side, species_id=species_id, mode=mode,
+                       crown_diameter_m=crown_diameter_m,
                        offset_from_edge_m=offset_from_edge_m, label=label)
 
 

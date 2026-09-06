@@ -30,6 +30,11 @@
     sites: ['sites-ring', 'sites'],
     shade: ['shade-fill'],
   };
+  const VERDICTS = {
+    valid: { label: 'No rule conflicts found', explanation: 'None of the evaluated rules failed. This is a planning check, not planting approval.' },
+    conditional: { label: 'Recommendation not met', explanation: 'At least one recommendation is not met. No required rule failed. This position is included in the proposed plan, but the conflicts below need assessment.' },
+    invalid: { label: 'Required rule not met', explanation: 'At least one required rule failed. This position is excluded from the proposed trees and their projected canopy.' },
+  };
   const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
   const emptyFc = () => ({ type: 'FeatureCollection', features: [] });
 
@@ -49,6 +54,10 @@
   // ------------------------------------------------------------ state
   const state = {
     config: null,
+    loadingStreet: false,
+    planning: false,
+    updatingRules: false,
+    dirty: false,
     cityId: null,
     basemapId: null,
     street: null,                 // StreetResponse currently on the map
@@ -61,9 +70,11 @@
     anim: 0,                      // requestAnimationFrame handle of the growth animation
     ppm0: 0,                      // pixels per metre at zoom 0 for the current centre latitude
     scaleRaf: 0,
-    shade: { enabled: false, result: null, timer: 0, seq: 0 },
+    shade: { enabled: false, result: null, timer: 0, seq: 0, when: { ...SHADE_WHEN } },
     draw: { active: false, points: [] },
+    pickingStreet: false,
     agent: { streaming: false },
+    temperature: { seq: 0, pending: false, result: null },
     status: { sources: [], estimated: [], warnings: [], notes: [], error: null },
     hoverPopup: null,
     pinPopup: null,
@@ -71,6 +82,7 @@
 
   const $ = (id) => document.getElementById(id);
   const activeScenario = () => state.scenarios.find((s) => s.scenario_id === state.activeScenarioId) || null;
+  const streetScenarios = () => state.scenarios.filter((s) => s.street_id === state.street?.street_id);
   const ui = {};
 
   /** Cache every element the app touches, by id. */
@@ -80,7 +92,9 @@
       'plan-btn', 'rules-meta', 'rules-source', 'rules', 'rules-reset', 'scenarios', 'scenarios-meta', 'compare-btn',
       'export-link', 'basemaps', 'play', 'year', 'readout', 'shade', 'shade-info', 'agent', 'agent-meta', 'messages',
       'agent-offline', 'prompt-chips', 'chat-form', 'chat-input', 'send', 'agent-foot', 'compare-modal',
-      'compare-close', 'compare-note', 'compare-table'];
+      'compare-close', 'compare-note', 'compare-table', 'workflow-status', 'data-status', 'data-summary',
+      'plan-hint', 'result-empty', 'result-content', 'result-name', 'result-trees', 'result-cover', 'result-guidance',
+      'view-plan', 'fit-street', 'map-hint', 'assistant-toggle', 'assistant-close'];
     for (const id of ids) ui[id.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = $(id);
     ui.dock = document.querySelector('.dock');
     ui.colRight = document.querySelector('.col-right');
@@ -218,23 +232,32 @@
       ]));
     }
     for (const n of s.notes) box.append(el('span', { class: 'pill pill-note', text: n }));
-    for (const w of s.warnings) box.append(el('span', { class: 'pill pill-warn', text: w }));
+    const data = ui.dataStatus;
+    data.replaceChildren();
+    for (const w of s.warnings) data.append(el('span', { class: 'pill pill-warn', text: w }));
     if (s.sources.length) {
-      box.append(el('span', { class: 'sources' }, [strong('Sources '), document.createTextNode(s.sources.join(' · '))]));
+      data.append(el('span', { class: 'sources' }, [strong('Sources '), document.createTextNode(s.sources.join(' · '))]));
     }
-    if (s.estimated.length) box.append(el('span', { class: 'sources', text: `estimated: ${s.estimated.join(', ')}` }));
-    if (!box.childElementCount) box.append(el('span', { class: 'sources', text: 'Loading…' }));
+    if (s.estimated.length) data.append(el('span', { class: 'sources', text: `estimated: ${s.estimated.join(', ')}` }));
+    const demo = state.street && state.street.city === 'demo';
+    ui.dataSummary.textContent = demo ? 'Illustrative demo data · view details'
+      : s.warnings.length || s.estimated.length ? 'Includes estimated data · view details' : 'Data sources and limitations';
+    box.hidden = !box.childElementCount;
+    if (s.error) ui.workflowStatus.textContent = 'Could not complete this step. Try again or choose another example street.';
   }
 
   function setError(message) {
     state.status.error = String(message);
+    if (message.startsWith('Street:')) $('street-picker').open = true;
     renderStatus();
+    ui.status.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'nearest' });
   }
 
   function clearError() {
     if (!state.status.error) return;
     state.status.error = null;
     renderStatus();
+    renderWorkflow();
   }
 
   function addNote(message) {
@@ -471,14 +494,10 @@
 
   /** Padding that keeps the fitted street clear of the floating panels. */
   function fitPadding() {
-    if (window.innerWidth <= 900) return 24;
-    const hdr = ui.header.getBoundingClientRect();
-    const left = ui.colLeft.getBoundingClientRect().right + 16;
-    const right = window.innerWidth - ui.colRight.getBoundingClientRect().left + 16;
-    const top = hdr.bottom + 16;
-    const bottom = window.innerHeight - ui.dock.getBoundingClientRect().top + 16;
-    if (left + right > window.innerWidth * 0.8 || top + bottom > window.innerHeight * 0.8) return 24;
-    return { top: Math.round(top), left: Math.round(left), right: Math.round(right), bottom: Math.round(bottom) };
+    return {
+      top: document.querySelector('.map-toolbar').offsetHeight + 36,
+      left: 30, right: 30, bottom: ui.dock.offsetHeight + 60,
+    };
   }
 
   function fitToBbox(bbox) {
@@ -504,19 +523,58 @@
     });
   }
 
+  function ruleRequirement(rule) {
+    const distance = `${fmt.num(rule.required_m, 2)} m`;
+    const text = {
+      building_crown: ['Mature crown too close to a building', `Keep at least ${distance} between the mature crown and a building.`],
+      sidewalk_passage: ['Not enough clear sidewalk space', `Leave at least ${distance} of clear sidewalk beside the tree pit.`],
+      junction: ['Too close to a junction', `Keep the trunk at least ${distance} from a junction.`],
+      existing_tree: ['Too close to an existing tree', `Keep the new trunk at least ${distance} from an existing tree trunk.`],
+      occupied_tree_position: ['An existing trunk occupies this position', 'A new tree cannot use the same mapped trunk position as an existing tree.'],
+      cycleway: ['Too close to a cycle path', `Keep the trunk at least ${distance} from the edge of a cycle path.`],
+      carriageway_edge: ['Too close to the road', `Keep the trunk at least ${distance} from the road edge.`],
+      plantable_surface: ['Position is outside a planting surface', 'Place the trunk on a sidewalk or verge, outside roads and buildings.'],
+    }[rule.rule_id];
+    return text || [rule.label, rule.required_m == null ? rule.label : `${rule.label}: at least ${distance}.`];
+  }
+
+  function requirementSource(rule, definition, pack) {
+    if (rule.rule_id === 'junction_exclusion') return 'Mandatory planning exclusion · 10 m along the street or to the trunk · not a surveyed sight triangle';
+    if (rule.rule_id === 'occupied_tree_position') return 'Geometry safeguard · uses mapped trunk positions, not a city clearance standard';
+    if (rule.assumption) return 'Editable planning default · not a cited city standard';
+    return definition && pack ? `${definition.overridden ? 'Edited for this plan · based on ' : ''}${ruleCitation(definition, pack)}` : 'See the rule pack for its source';
+  }
+
+  function failedRuleCard(rule, definition, pack) {
+    const [problem, requirement] = ruleRequirement(rule);
+    const clearance = rule.measured_m == null ? rule.note || 'Clearance could not be calculated.'
+      : rule.measured_m < 0 && rule.rule_id === 'building_crown'
+        ? `The mature crown overlaps the building by ${fmt.num(-rule.measured_m, 2)} m.`
+        : `Available here: ${fmt.num(rule.measured_m, 2)} m${rule.basis === 'estimated' ? ' (estimated)' : ''}.`;
+    return el('li', { class: 'explicit-rule' }, [
+      el('strong', { text: problem }),
+      el('p', { text: `${rule.mode === 'should' ? 'Recommendation' : 'Required rule'}: ${requirement}` }),
+      rule.required_m != null || rule.rule_id === 'occupied_tree_position' ? el('p', { text: clearance }) : null,
+      el('p', { class: 'hint', text: requirementSource(rule, definition, pack) }),
+    ]);
+  }
+
   function ruleLine(r, ruleDef) {
-    const cls = r.passed === true ? 'pass' : r.passed === false ? 'fail' : 'na';
-    const mark = r.passed === true ? '✓' : r.passed === false ? '✗' : '–';
+    const cls = r.passed === true ? 'pass' : r.passed === false ? (r.mode === 'should' ? 'recommendation-fail' : 'fail') : 'na';
+    const mark = r.passed === true ? '✓' : r.passed === false ? (r.mode === 'should' ? '!' : '✗') : '–';
+    const threshold = r.mode === 'should' ? 'recommended' : 'required';
     let measure;
-    if (r.required_m == null) {
+    if (r.rule_id === 'occupied_tree_position') {
+      measure = r.passed ? 'no mapped trunk at this position' : 'position coincides with a mapped existing trunk';
+    } else if (r.required_m == null) {
       measure = r.passed == null ? (r.note || 'not evaluated') : (r.passed ? 'on plantable surface' : 'off plantable surface');
     } else if (r.measured_m == null) {
-      measure = `${r.note || 'not measurable'} · ≥ ${fmt.num(r.required_m, 2)} m required`;
+      measure = `${r.note || 'not measurable'} · ≥ ${fmt.num(r.required_m, 2)} m ${threshold}`;
     } else {
-      measure = `${fmt.num(r.measured_m, 2)} m vs ≥ ${fmt.num(r.required_m, 2)} m`;
+      measure = `${fmt.num(r.measured_m, 2)} m available; at least ${fmt.num(r.required_m, 2)} m ${threshold}`;
     }
-    const cite = ruleDef && ruleDef.source_ref ? shortRef(ruleDef.source_ref) : (r.assumption ? 'planning default' : null);
-    const meta = ` (${r.mode}${cite ? `, ${cite}` : ''}${r.basis && r.basis !== 'measured' ? `, ${r.basis}` : ''})`;
+    const cite = r.rule_id === 'occupied_tree_position' ? 'geometry safeguard' : ruleDef && ruleDef.source_ref ? shortRef(ruleDef.source_ref) : (r.assumption ? 'planning default' : null);
+    const meta = ` (${r.mode === 'should' ? 'recommendation' : 'required rule'}${cite ? `, ${cite}` : ''}${r.basis && r.basis !== 'measured' ? `, ${r.basis}` : ''})`;
     return el('li', { class: `rule-line ${cls}` }, [
       el('span', { class: 'mark', text: mark }),
       el('span', {}, [
@@ -531,13 +589,26 @@
   function siteCard(props) {
     const sc = activeScenario();
     const defs = new Map(((sc && sc.rules_used && sc.rules_used.rules) || []).map((r) => [r.id, r]));
+    const verdict = VERDICTS[props.verdict] || VERDICTS.valid;
+    const rules = props.rules || [];
+    const failed = rules.filter((r) => r.passed === false).sort((a, b) => (a.mode === 'must' ? 0 : 1) - (b.mode === 'must' ? 0 : 1));
+    const unknown = rules.filter((r) => r.passed == null);
     return el('div', { class: 'pop' }, [
       el('div', { class: 'pop-head' }, [
-        el('span', { class: 'pop-title mono', text: props.site_id }),
-        el('span', { class: `verdict verdict-${props.verdict}`, text: props.verdict }),
+        el('span', { class: 'pop-title', text: 'Proposed tree position' }),
+        el('span', { class: `verdict verdict-${props.verdict}`, text: verdict.label }),
       ]),
-      el('div', { class: 'pop-meta mono', text: `station ${fmt.station(props.station_m)} · ${props.side} · edge ${fmt.m(props.edge_distance_m, 2)} · crown ${fmt.num(props.crown_d_mature_m, 0)} m mature` }),
-      el('ul', { class: 'pop-rules' }, (props.rules || []).map((r) => ruleLine(r, defs.get(r.rule_id)))),
+      el('p', { class: 'pop-explanation', text: verdict.explanation }),
+      failed.length ? el('div', { class: 'site-conflicts' }, [
+        el('b', { text: 'Why this position is flagged' }),
+        el('ul', { class: 'pop-rules' }, failed.map((r) => failedRuleCard(r, defs.get(r.rule_id), sc && sc.rules_used))),
+      ]) : null,
+      unknown.length ? el('p', { class: 'hint', text: `${unknown.length} checks could not be evaluated. Open all checks for the missing information.` }) : null,
+      el('details', { class: 'site-checks' }, [
+        el('summary', { text: `All ${rules.length} rule checks and sources` }),
+        el('ul', { class: 'pop-rules' }, rules.map((r) => ruleLine(r, defs.get(r.rule_id)))),
+      ]),
+      el('div', { class: 'pop-meta', text: `${props.site_id} · ${Math.round(props.station_m)} m along the street · ${props.side} side · mature crown ${fmt.num(props.crown_d_mature_m, 0)} m wide` }),
     ]);
   }
 
@@ -589,36 +660,60 @@
     map.on('zoom', scheduleScale);
     map.on('move', scheduleScale);
     map.on('mousemove', 'sites', (e) => {
-      if (state.draw.active || !e.features.length) return;
+      if (state.draw.active || state.pickingStreet || !e.features.length) return;
       map.getCanvas().style.cursor = 'pointer';
       showHover(e.features[0]);
     });
     map.on('mouseleave', 'sites', () => { map.getCanvas().style.cursor = ''; hideHover(); });
     map.on('click', 'sites', (e) => {
-      if (state.draw.active || !e.features.length) return;
+      if (state.draw.active || state.pickingStreet || !e.features.length) return;
       const f = siteFeature(e.features[0].properties.site_id);
       if (f) pinPopup(f.geometry.coordinates, siteCard(f.properties));
     });
-    map.on('mouseenter', 'existing-crowns', () => { if (!state.draw.active) map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseenter', 'existing-crowns', () => { if (!state.draw.active && !state.pickingStreet) map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'existing-crowns', () => { map.getCanvas().style.cursor = ''; });
     map.on('click', 'existing-crowns', (e) => {
-      if (state.draw.active || !e.features.length) return;
+      if (state.draw.active || state.pickingStreet || !e.features.length) return;
       if (map.queryRenderedFeatures(e.point, { layers: ['sites'] }).length) return;
       pinPopup(e.lngLat, treeCard(e.features[0].properties));
     });
     map.on('click', onDrawClick);
+    map.on('click', async (e) => {
+      if (!state.pickingStreet || state.draw.active || state.loadingStreet || state.planning || state.updatingRules || state.agent.streaming) return;
+      if (map.getZoom() < 15) {
+        map.easeTo({ center: e.lngLat, zoom: 16, duration: motionMs(500) });
+        ui.mapHint.textContent = 'Zoomed in. Click the street you want to check.';
+        return;
+      }
+      await loadStreetAndPlan({ city: state.cityId, point: [e.lngLat.lng, e.lngLat.lat] }, { fallback: false });
+    });
     map.on('dblclick', onDrawDoubleClick);
   }
 
   // -- drawing a street axis
+  function setStreetPicking(active) {
+    state.pickingStreet = active && state.cityId !== 'demo';
+    ui.map.classList.toggle('picking-street', state.pickingStreet);
+    map.getCanvas().style.cursor = '';
+    if (state.pickingStreet) { hideHover(); if (state.pinPopup) state.pinPopup.remove(); }
+    renderWorkflow();
+  }
+
   function startDraw() {
+    if (state.loadingStreet || state.planning || state.agent.streaming || !state.config) return;
+    setStreetPicking(false);
     state.draw.active = true;
     state.draw.points = [];
     map.doubleClickZoom.disable();
     ui.map.classList.add('drawing');
     ui.draw.setAttribute('aria-pressed', 'true');
-    ui.draw.textContent = 'Click points · double-click to finish · Esc cancels';
+    $('draw-actions').hidden = false;
+    document.querySelector('.map-workspace').classList.add('is-drawing');
+    ui.draw.textContent = 'Cancel drawing';
+    ui.mapHint.textContent = 'Click at least two points on the map. Then choose Finish drawing. Escape cancels.';
+    ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
     hideHover();
+    renderWorkflow();
     renderDraw();
   }
 
@@ -628,12 +723,18 @@
     map.doubleClickZoom.enable();
     ui.map.classList.remove('drawing');
     ui.draw.setAttribute('aria-pressed', 'false');
+    $('draw-actions').hidden = true;
+    document.querySelector('.map-workspace').classList.remove('is-drawing');
     ui.draw.textContent = 'Draw street';
+    renderWorkflow();
     renderDraw();
   }
 
   function renderDraw() {
     const pts = state.draw.points;
+    $('finish-draw').disabled = pts.length < 2;
+    $('undo-draw').disabled = pts.length === 0;
+    if (state.draw.active) ui.mapHint.textContent = `${pts.length} ${pts.length === 1 ? 'point' : 'points'} selected. Follow the street centreline; select at least two points, then Finish drawing.`;
     const features = pts.map((p) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: p }, properties: {} }));
     if (pts.length >= 2) features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: pts }, properties: {} });
     setSourceData('draw', { type: 'FeatureCollection', features });
@@ -665,15 +766,31 @@
   const cityById = (id) => (state.config ? state.config.cities.find((c) => c.id === id) : null);
   const firstDemoStreet = (cityId) => { const c = cityById(cityId); return c && c.demo_streets.length ? c.demo_streets[0] : null; };
 
-  /** Make a city current: select, demo chips, basemap. Loads its first demo street unless silent. */
+  /** Choose where to search or draw; street loading is an explicit user action. */
   function selectCity(cityId, { silent = false } = {}) {
     const city = cityById(cityId);
     if (!city) return;
     state.cityId = city.id;
     ui.city.value = city.id;
+    ui.search.placeholder = `Street name in ${city.name}`;
     renderDemoChips(city);
     setBasemap(city, null);
-    if (!silent) loadStreetAndPlan({ city: city.id, query: firstDemoStreet(city.id) }, { fallback: true });
+    if (!silent) {
+      if (state.draw.active) stopDraw();
+      state.street = null;
+      state.dirty = false;
+      for (const key of LAYER_KEYS) setSourceData(key, emptyFc());
+      clearScenarioView();
+      $('tree-evidence').hidden = true;
+      $('street-picker').open = true;
+      ui.streetMeta.textContent = '';
+      ui.search.value = '';
+      Object.assign(state.status, { sources: [], estimated: [], warnings: [], notes: [], error: null });
+      renderStatus();
+      map.flyTo({ center: city.center, zoom: city.zoom, duration: motionMs(700) });
+      setStreetPicking(city.id !== 'demo');
+      renderWorkflow();
+    }
   }
 
   function renderDemoChips(city) {
@@ -691,10 +808,24 @@
 
   /** POST /api/street. On failure of a default street, fall back to the offline demo city. */
   async function loadStreet(req, { fallback = true } = {}) {
+    state.loadingStreet = true;
+    renderWorkflow();
     setBusy(ui.searchBtn, true);
     ui.draw.disabled = true;
     try {
-      const street = await api('/api/street', { method: 'POST', body: req });
+      let street = await api('/api/street', { method: 'POST', body: req });
+      const treeSource = street.layer_sources && street.layer_sources.existing_trees;
+      const axis = street.layers.axis && street.layers.axis.features[0];
+      // Named streets can retain an old OSM fallback after the city feed recovers.
+      // Rebuild once with the same line; never recursively retry a drawn request.
+      if (req.query && street.city === 'zurich' && treeSource && treeSource.includes('OpenStreetMap') && axis && axis.geometry.type === 'LineString') {
+        ui.workflowStatus.textContent = 'Rechecking Zürich’s tree register for existing trees…';
+        try {
+          street = await api('/api/street', { method: 'POST', body: {
+            city: street.city, line: axis.geometry.coordinates, name: street.name,
+          } });
+        } catch (_) { /* Keep the available street; its OSM fallback warning stays visible. */ }
+      }
       applyStreet(street, { fit: true });
       clearError();
       return street;
@@ -710,7 +841,8 @@
       return null;
     } finally {
       setBusy(ui.searchBtn, false);
-      ui.draw.disabled = false;
+      state.loadingStreet = false;
+      renderWorkflow();
     }
   }
 
@@ -722,7 +854,11 @@
 
   /** Put a StreetResponse on the map and clear any scenario view. */
   function applyStreet(street, { fit = true } = {}) {
+    if (state.draw.active) stopDraw();
+    setStreetPicking(false);
+    $('street-picker').open = false;
     state.street = street;
+    state.dirty = false;
     state.streets.set(street.street_id, street);
     if (street.city !== state.cityId && cityById(street.city)) selectCity(street.city, { silent: true });
     for (const key of LAYER_KEYS) {
@@ -749,18 +885,18 @@
 
   function renderStreetMeta(street) {
     const s = street.stats || {};
-    const parts = [
-      [`${street.name || 'Street'} · ${street.city_name || street.city}`],
-      [fmt.grouped(street.length_m), ' m'],
-      [fmt.int(s.existing_trees), ` existing trees${s.existing_trees_crown_imputed ? ` (${fmt.int(s.existing_trees_crown_imputed)} crowns imputed)` : ''}`],
-      [fmt.int(s.junctions), ' junctions'],
-      [fmt.grouped(s.cycleway_m), ' m cycleway'],
-    ];
-    ui.streetMeta.replaceChildren(...parts.flatMap(([b, rest], i) => [
-      i ? document.createTextNode(' · ') : null,
-      i ? strong(b) : el('span', { text: b }),
-      rest ? document.createTextNode(rest) : null,
-    ]).filter((node) => node != null));
+    ui.streetMeta.textContent = `${street.name || 'Street'} · ${fmt.grouped(street.length_m)} m`;
+    $('tree-evidence').hidden = false;
+    $('existing-tree-count').textContent = `${fmt.int(s.existing_trees)} existing trees loaded`;
+    const source = street.layer_sources && street.layer_sources.existing_trees;
+    const fallback = street.city === 'zurich' && source && source.includes('OpenStreetMap');
+    $('existing-tree-source').textContent = fallback ? 'Zürich tree register unavailable. Using OpenStreetMap.' : `Source: ${source || 'No tree source available'}`;
+    $('existing-tree-limit').textContent = street.city === 'demo' ? 'Illustrative trees for this demo.'
+      : fallback ? 'Some existing trees may be missing. An empty spot on the map is not proof of space for a new tree.'
+      : 'The loaded trees are included in spacing checks and canopy estimates. The inventory may not contain every tree.';
+    $('tree-evidence').classList.toggle('has-warning', Boolean(fallback));
+    $('refresh-tree-data').hidden = !fallback;
+    renderWorkflow();
   }
 
   // ------------------------------------------------------------ plans & scenarios
@@ -769,21 +905,41 @@
   /** PlanParams from the Plan card (offset, pit, pack from config defaults). */
   function formParams() {
     const d = (state.config && state.config.defaults) || {};
+    const side = radioValue('side') || d.side || 'both';
+    const mode = radioValue('mode') || d.mode || 'grid';
+    const label = [
+      `${Number(ui.spacing.value)} m`, speciesShort(ui.species.value),
+      `${Number($('crown-size').value)} m crown`, side, mode,
+    ].join(' · ');
     return {
       spacing_m: Number(ui.spacing.value),
-      side: radioValue('side') || d.side || 'both',
+      side,
       species_id: ui.species.value || d.species_id,
-      mode: radioValue('mode') || d.mode || 'grid',
+      crown_diameter_m: Number($('crown-size').value),
+      mode,
       offset_from_edge_m: d.offset_from_edge_m ?? 1.0,
       pit_width_m: d.pit_width_m ?? 2.0,
       rule_pack_id: state.pack ? state.pack.id : d.rule_pack_id,
-      label: ui.label.value.trim() || null,
+      label: ui.label.value.trim() || label.slice(0, 60),
     };
+  }
+
+  function updatePlanDraft() {
+    const sc = activeScenario();
+    const p = formParams();
+    state.dirty = !sc || ['spacing_m', 'species_id', 'side', 'mode'].some(key => p[key] !== sc.params[key])
+      || p.crown_diameter_m !== sc.species.mature_crown_d_m
+      || Boolean(ui.label.value.trim() && ui.label.value.trim() !== sc.label);
+    invalidateTemperature(state.dirty ? 'Apply the changed plan before comparing temperatures.' : 'Ready to compare this plan with the current trees.');
+    renderWorkflow();
   }
 
   /** POST /api/plan for the current street; the new scenario becomes active. */
   async function runPlan(params, { replaceId = null } = {}) {
-    if (!state.street) { setError('Load a street before planning.'); return null; }
+    if (!state.street) { setError('Explore a street before planning.'); return null; }
+    if (state.planning) return null;
+    state.planning = true;
+    renderWorkflow();
     setBusy(ui.planBtn, true);
     try {
       const sc = await api('/api/plan', { method: 'POST', body: { street_id: state.street.street_id, ...params } });
@@ -795,7 +951,9 @@
       setError(`Plan: ${err.message}`);
       return null;
     } finally {
+      state.planning = false;
       setBusy(ui.planBtn, false);
+      renderWorkflow();
     }
   }
 
@@ -830,24 +988,39 @@
       if (st) applyStreet(st, { fit: true });
     }
     state.activeScenarioId = sc.scenario_id;
+    invalidateTemperature('Ready to compare this plan with the current trees.');
+    invalidateShade();
+    state.dirty = false;
+    const params = sc.params || {};
+    if (params.spacing_m != null) ui.spacing.value = String(params.spacing_m);
+    if (params.species_id) ui.species.value = params.species_id;
+    $('crown-size').value = String(sc.species?.mature_crown_d_m ?? params.crown_diameter_m ?? 10);
+    for (const name of ['side', 'mode']) {
+      for (const input of ui.planForm.querySelectorAll(`input[name="${name}"]`)) input.checked = input.value === params[name];
+    }
+    ui.label.value = '';
+    ui.spacingOut.textContent = `${fmt.num(ui.spacing.value, 1)} m`;
+    renderSpeciesHint();
     const fc = decorateSites(sc.sites || emptyFc());
     state.siteIndex = new Map(fc.features.map((f) => [f.properties.site_id, f]));
     setSourceData('sites', fc);
     if (!state.street || state.street.street_id !== sc.street_id) fitToBbox(bboxOfPoints(fc));
     hideHover();
+    if (state.pinPopup) state.pinPopup.remove();
     renderScenarios();
     renderPlanMeta(sc);
     renderYearReadout();
     renderExport();
+    renderWorkflow();
     if (state.shade.enabled) fetchShade(); else setSourceData('shade', emptyFc());
   }
 
   function clearScenarioView() {
     state.activeScenarioId = null;
+    invalidateTemperature('Choose a street and create a plan first.');
     state.siteIndex = new Map();
     setSourceData('sites', emptyFc());
-    setSourceData('shade', emptyFc());
-    state.shade.result = null;
+    invalidateShade();
     hideHover();
     if (state.pinPopup) state.pinPopup.remove();
     renderScenarios();
@@ -865,14 +1038,18 @@
 
   function renderScenarios() {
     ui.scenariosMeta.textContent = state.scenarios.length ? String(state.scenarios.length) : '';
-    ui.compareBtn.disabled = state.scenarios.length === 0;
+    const count = streetScenarios().length;
+    ui.compareBtn.disabled = count < 2;
+    ui.compareBtn.title = count < 2 ? 'Create a second plan for this street to compare alternatives' : 'Compare up to six plans for this street';
+    $('compare-help').textContent = count < 2 ? 'Create a second plan for this street to compare alternatives.'
+      : `${count} plans for ${state.street.name}. Compare ${count > 6 ? 'the selected plan and five recent alternatives' : 'these plans'} at 30 years.`;
     if (!state.scenarios.length) {
-      ui.scenarios.replaceChildren(el('p', { class: 'hint', text: 'Plans you run appear here. Click one to show it on the map.' }));
+      ui.scenarios.replaceChildren(el('p', { class: 'hint', text: 'Create a plan, then change the settings to compare alternatives.' }));
       return;
     }
     ui.scenarios.replaceChildren(...state.scenarios.map((sc, i) => {
       const street = state.streets.get(sc.street_id);
-      const foreign = state.street && sc.street_id !== state.street.street_id;
+      const foreign = !state.street || sc.street_id !== state.street.street_id;
       return el('button', {
         type: 'button', class: 'scenario', 'aria-pressed': String(sc.scenario_id === state.activeScenarioId),
         onclick: () => selectScenario(sc.scenario_id),
@@ -880,8 +1057,8 @@
         el('span', { class: 'scenario-label', text: sc.label || sc.scenario_id }),
         el('span', { class: 'scenario-n mono', text: `#${i + 1}` }),
         el('span', { class: 'scenario-stats mono' }, [
-          strong(fmt.int(sc.summary && sc.summary.planted)), document.createTextNode(' trees · '),
-          strong(fmt.pct(cover30(sc))), document.createTextNode(' corridor at 30 y'),
+          strong(fmt.int(sc.summary && sc.summary.planted)), document.createTextNode(' proposed · '),
+          strong(fmt.pct(cover30(sc))), document.createTextNode(' tree cover at 30 years'),
         ]),
         foreign ? el('span', { class: 'scenario-street', text: street ? street.name : sc.street_id }) : null,
       ]);
@@ -889,9 +1066,181 @@
   }
 
   function renderPlanMeta(sc) {
-    if (!sc || !sc.summary) { ui.planMeta.textContent = ''; return; }
+    ui.resultEmpty.hidden = Boolean(sc);
+    ui.resultContent.hidden = !sc;
+    ui.planMeta.replaceChildren();
+    $('review-reasons').replaceChildren();
+    if (!sc || !sc.summary) return;
     const s = sc.summary;
-    ui.planMeta.textContent = `${s.valid} valid · ${s.conditional} cond. · ${s.invalid} invalid`;
+    const pack = sc.rules_used;
+    const definitions = new Map(((pack && pack.rules) || []).map(r => [r.id, r]));
+    $('plan-rule-basis').textContent = pack ? `Checks use ${pack.name}, plus editable planning defaults.${state.street && state.street.city === 'zurich' && pack.jurisdiction === 'Berlin' ? ' This is not a Zürich-specific planting standard.' : ''}` : '';
+    ui.resultName.textContent = sc.label;
+    ui.resultTrees.textContent = fmt.int(s.planted);
+    ui.resultCover.textContent = fmt.pct(cover30(sc));
+    ui.planMeta.replaceChildren(...[
+      ['valid', s.valid, 'green · no rule conflicts found'], ['conditional', s.conditional, 'amber · recommendation not met'], ['invalid', s.invalid, 'red · excluded from this plan'],
+    ].map(([verdict, count, label]) => el('span', { class: `result-verdict verdict-${verdict}`, text: `${count} ${label}` })));
+    const reasons = new Map();
+    for (const site of (sc.sites && sc.sites.features) || []) {
+      const p = site.properties;
+      if (p.verdict !== 'conditional' && p.verdict !== 'invalid') continue;
+      for (const rule of p.rules || []) {
+        if (rule.passed !== false) continue;
+        const reason = reasons.get(rule.rule_id) || { rule, count: 0, included: 0, siteId: p.site_id };
+        reason.count += 1;
+        if (p.verdict === 'conditional') reason.included += 1;
+        reasons.set(rule.rule_id, reason);
+      }
+    }
+    if (reasons.size) $('review-reasons').replaceChildren(
+      el('p', { class: 'hint', text: 'Select a reason to inspect a position. Amber positions remain proposed; red positions are excluded. A position can have more than one conflict.' }),
+      ...Array.from(reasons.values()).sort((a, b) => b.count - a.count).map((reason) => el('button', {
+        type: 'button', class: 'review-reason',
+        onclick: () => {
+          ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+          focusSite(reason.siteId);
+        },
+      }, [
+        el('strong', { text: ruleRequirement(reason.rule)[0] }),
+        el('span', { text: ruleRequirement(reason.rule)[1] }),
+        el('span', { class: 'hint', text: requirementSource(reason.rule, definitions.get(reason.rule.rule_id), pack) }),
+        el('span', { class: 'inspect-reason', text: `${reason.included} amber · ${reason.count - reason.included} excluded · Inspect an example →` }),
+      ])),
+    );
+    ui.resultGuidance.textContent = s.planted === 0
+      ? 'No proposed trees fit these settings. Try a smaller tree species or choose “Fit around obstacles” in More planting options.'
+      : `${s.conditional ? 'Amber positions are included in the proposed tree count and canopy estimate. Red positions are excluded. ' : ''}Select a tree marker on the map to see which rules it passes.`;
+  }
+
+  function renderWorkflow() {
+    const busy = state.loadingStreet || state.planning || state.updatingRules || state.agent.streaming;
+    const rulesPending = activeScenario() && state.pack && JSON.stringify(state.pack.rules) !== JSON.stringify(activeScenario().rules_used?.rules);
+    const hasPlan = Boolean(activeScenario());
+    $('settings-card').hidden = !state.street;
+    $('review-card').hidden = !hasPlan;
+    $('temperature-card').hidden = !hasPlan;
+    $('plans-card').hidden = !state.scenarios.length;
+    $('rules-details').hidden = !state.street;
+    document.querySelector('.data-details').hidden = !state.street;
+    ui.fitStreet.hidden = !state.street;
+    $('back-to-plan').textContent = state.street ? 'Back to settings' : 'Back to street selection';
+    $('growth-dock').hidden = !hasPlan || state.draw.active || state.pickingStreet;
+    $('map-key').hidden = !hasPlan || state.draw.active || state.pickingStreet;
+    $('review-checks').hidden = !$('review-reasons').childElementCount;
+    $('refresh-tree-data').disabled = busy;
+    const canCompareTemperature = Boolean(activeScenario()) && !state.dirty && !rulesPending;
+    $('temperature-btn').disabled = busy || !canCompareTemperature || state.temperature.pending;
+    for (const input of $('temperature-form').querySelectorAll('input, select')) input.disabled = busy || !activeScenario();
+    $('temperature-map').disabled = busy || !state.temperature.result;
+    if (state.dirty || rulesPending) $('temperature-status').textContent = 'Apply the changed plan or rules before comparing temperatures.';
+    ui.city.disabled = busy || !state.config;
+    ui.search.disabled = busy || !state.config;
+    ui.searchBtn.disabled = busy || !state.config;
+    ui.searchBtn.textContent = state.loadingStreet ? 'Loading…' : 'Explore street';
+    ui.searchForm.hidden = state.cityId === 'demo';
+    $('street-selection-help').textContent = state.cityId === 'demo'
+      ? 'Use the example for synthetic data, or draw a section with estimated geometry.'
+      : 'Click a street on the map, search by name, or draw your own section.';
+    ui.draw.disabled = busy || !state.config;
+    ui.draw.hidden = state.draw.active;
+    $('pick-street').hidden = state.draw.active || state.cityId === 'demo';
+    $('pick-street').disabled = busy || !state.config || state.cityId === 'demo';
+    $('pick-street').setAttribute('aria-pressed', String(state.pickingStreet));
+    $('pick-street').textContent = state.loadingStreet && state.pickingStreet ? 'Finding street…' : state.pickingStreet ? 'Cancel street selection' : 'Select street on map';
+    $('pick-street').title = state.cityId === 'demo' ? 'Choose a real city to select a mapped street.' : '';
+    for (const chip of ui.demoChips.children) chip.disabled = busy;
+    for (const scenario of ui.scenarios.querySelectorAll('button')) scenario.disabled = busy;
+    ui.compareBtn.disabled = busy || streetScenarios().length < 2;
+    ui.rules.inert = busy;
+    ui.rulesReset.disabled = busy;
+    ui.send.disabled = busy;
+    for (const chip of ui.promptChips.children) chip.disabled = busy;
+    for (const input of ui.planForm.querySelectorAll('input, select')) input.disabled = busy || !state.street;
+    ui.planBtn.disabled = busy || !state.street || (hasPlan && !state.dirty && !rulesPending);
+    ui.planBtn.textContent = state.planning ? 'Checking tree positions…' : rulesPending ? 'Apply rules' : state.dirty ? 'Apply changes' : 'Plan is up to date';
+    if (!activeScenario() && !state.planning) ui.planBtn.textContent = 'Create tree plan';
+    ui.fitStreet.disabled = !state.street;
+    for (const control of [ui.year, ui.play, ui.shade]) control.disabled = !activeScenario() || busy;
+    ui.workflowStatus.textContent = state.loadingStreet ? 'Loading the street and checking available data…'
+      : state.planning ? 'Checking planting rules and estimating tree cover…'
+      : state.updatingRules ? 'Updating the planting rules…'
+      : state.agent.streaming ? 'The assistant is working on your request…'
+      : state.status.error ? 'Could not complete this step. Try again or choose another example street.'
+      : rulesPending ? 'Rules changed. Apply rules to update the map.'
+      : state.dirty ? 'Settings changed. Apply changes to update the map.'
+      : activeScenario() ? 'Plan ready. Adjust the trees or review your result below.'
+      : state.street ? 'Street ready. Create a plan to see possible tree positions.' : 'Choose a street to start.';
+    ui.planHint.textContent = rulesPending ? 'Planting rules changed since this plan. Apply them to update its checks and map.'
+      : state.dirty ? 'The map still shows your previous plan. Apply your changes below.'
+      : hasPlan ? 'Change a setting to create an alternative. Your previous plan stays available for comparison.'
+      : 'Create a plan to check planting positions and estimate tree cover.';
+    ui.mapHint.textContent = state.loadingStreet && state.pickingStreet ? 'Finding the clicked street and loading its data…'
+      : state.pickingStreet ? 'Click the centre of a street to select it and create a tree plan. Drag to move the map. Escape cancels.'
+      : state.draw.active ? 'Click at least two points on the map. Then choose Finish drawing. Escape cancels.' : activeScenario()
+      ? `${state.street.name} · Select a tree marker to understand its position.`
+      : state.cityId === 'demo' ? 'Choose the demo example or draw a section. Data is illustrative.'
+      : 'Explore a street to see possible tree positions.';
+    ui.workflowStatus.classList.toggle('is-pending', busy || state.dirty || Boolean(rulesPending));
+    const sc = activeScenario();
+    $('review-result').hidden = !sc;
+    if (sc) $('review-result').textContent = `${fmt.int(sc.summary.planted)} proposed · ${fmt.pct(cover30(sc))} cover at 30 years · Review ↓`;
+  }
+
+  function toggleAssistant(open) {
+    ui.agent.hidden = !open;
+    ui.assistantToggle.setAttribute('aria-expanded', String(open));
+    if (open) (ui.chatForm.hidden ? ui.assistantClose : ui.chatInput).focus();
+    else ui.assistantToggle.focus();
+  }
+
+  function invalidateTemperature(message = 'Settings changed. Compare temperatures again.') {
+    state.temperature.seq += 1;
+    state.temperature.pending = false;
+    state.temperature.result = null;
+    $('temperature-result').hidden = true;
+    $('temperature-btn').textContent = 'Compare temperatures';
+    $('temperature-status').textContent = message;
+  }
+
+  async function compareTemperature() {
+    const scenario = activeScenario();
+    if (!scenario || state.temperature.pending || $('temperature-btn').disabled) return;
+    const form = $('temperature-form');
+    if (!form.reportValidity()) return;
+    const params = {
+      scenario_id: scenario.scenario_id,
+      reference_air_c: Number($('reference-air').value), year: Number($('temperature-year').value),
+      month: Number($('temperature-month').value), day: Number($('temperature-day').value), hour: Number($('temperature-hour').value),
+    };
+    invalidateTemperature('Comparing current trees and proposed trees…');
+    const seq = state.temperature.seq;
+    state.temperature.pending = true;
+    $('temperature-btn').textContent = 'Calculating comparison…';
+    renderWorkflow();
+    try {
+      const result = await api('/api/temperature', { method: 'POST', body: params });
+      if (seq !== state.temperature.seq || result.scenario_id !== state.activeScenarioId) return;
+      state.temperature.result = result;
+      $('temperature-context').textContent = `${state.street.name} · ${scenario.label} · year ${result.year} · ${result.when}`;
+      $('temperature-before').textContent = `${fmt.num(result.reference_air_c, 1)}°C`;
+      $('temperature-after').textContent = `${fmt.num(result.proposed_air_c, 2)}°C`;
+      $('temperature-delta').textContent = result.cooling_c > 0 ? `${fmt.num(result.cooling_c, 2)}°C lower in this exploratory model` : 'No additional air cooling at the displayed precision.';
+      $('temperature-range').textContent = `Sensitivity range: ${fmt.num(result.proposed_air_low_c, 2)}–${fmt.num(result.proposed_air_high_c, 2)}°C (${fmt.num(result.cooling_low_c, 2)}–${fmt.num(result.cooling_high_c, 2)}°C lower). This is not a forecast interval; actual cooling can fall outside it.`;
+      $('temperature-shade').textContent = `Sidewalk under tree shade: ${fmt.pct(result.existing_sidewalk_shade_pct)} with current trees → ${fmt.pct(result.proposed_sidewalk_shade_pct)} with this plan, at the selected time.`;
+      $('temperature-canopy').textContent = `Average canopy within 10 m of ${result.sample_count} sidewalk sample points: ${fmt.pct(result.existing_local_canopy_pct)} → ${fmt.pct(result.proposed_local_canopy_pct)}.`;
+      $('temperature-limitations').replaceChildren(...result.limitations.map(text => el('li', { text })));
+      $('temperature-status').textContent = state.street.city === 'demo' ? 'Comparison ready · illustrative demo street.' : 'Comparison ready · research-based illustration, not a local forecast.';
+      $('temperature-result').hidden = false;
+    } catch (err) {
+      if (seq === state.temperature.seq) $('temperature-status').textContent = `Could not compare temperatures: ${err.message}`;
+    } finally {
+      if (seq === state.temperature.seq) {
+        state.temperature.pending = false;
+        $('temperature-btn').textContent = 'Compare temperatures';
+        renderWorkflow();
+      }
+    }
   }
 
   function renderExport() {
@@ -901,10 +1250,12 @@
     if (id) ui.exportLink.setAttribute('download', `canopy-${id}.geojson`);
   }
 
-  /** POST /api/compare over the last six scenarios and open the table modal. */
+  /** Compare the selected plan with recent alternatives for the same street. */
   async function openCompare() {
-    const ids = state.scenarios.slice(-6).map((s) => s.scenario_id);
-    if (!ids.length) { setError('Run a plan first, then compare.'); return; }
+    const selected = activeScenario();
+    const alternatives = streetScenarios().filter((s) => s !== selected).slice(-5);
+    const ids = [...(selected ? [selected] : []), ...alternatives].map((s) => s.scenario_id);
+    if (ids.length < 2) { setError('Create a second plan for this street to compare.'); return; }
     setBusy(ui.compareBtn, true);
     try {
       showCompare(await api('/api/compare', { method: 'POST', body: { scenario_ids: ids } }));
@@ -918,31 +1269,52 @@
 
   function showCompare(res) {
     const cols = [
-      ['Scenario', (r) => r.label], ['Spacing', (r) => `${fmt.num(r.spacing_m, 1)} m`], ['Side', (r) => r.side],
-      ['Species', (r) => speciesShort(r.species_id)], ['Mode', (r) => r.mode], ['Planted', (r) => fmt.int(r.planted)],
-      ['Valid', (r) => fmt.int(r.valid)], ['Cond.', (r) => fmt.int(r.conditional)], ['Invalid', (r) => fmt.int(r.invalid)],
-      ['New crown 30 y', (r) => `${fmt.grouped(r.new_crown_area_30_m2)} m²`], ['Corridor 30 y', (r) => fmt.pct(r.cover_corridor_pct_30)],
-      ['Street 30 y', (r) => fmt.pct(r.cover_street_pct_30)], ['Sidewalk 30 y', (r) => fmt.pct(r.sidewalk_under_crown_pct_30)],
+      ['Plan', (r) => r.label],
+      ['Street / data', (r) => `${r.street_name || state.streets.get(r.street_id)?.name || 'Unknown street'} · ${r.city === 'demo' ? 'Illustrative demo' : (r.city_name || cityById(r.city)?.name || r.city || 'See street sources')}`],
+      ['Proposed trees', (r) => fmt.int(r.planted)],
+      ['Tree cover at 30 years', (r) => fmt.pct(r.cover_corridor_pct_30)],
+      ['Amber', (r) => fmt.int(r.conditional)], ['Excluded', (r) => fmt.int(r.invalid)],
     ];
-    const head = el('thead', {}, el('tr', {}, cols.map(([h]) => el('th', { scope: 'col', text: h }))));
-    const body = el('tbody', {}, (res.rows || []).map((r) => el('tr', {
-      class: [r.scenario_id === res.best_by_cover ? 'best' : '', r.scenario_id === state.activeScenarioId ? 'active' : ''].join(' ').trim(),
-      tabindex: '0',
-      onclick: () => { selectScenario(r.scenario_id); closeCompare(); },
-      onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectScenario(r.scenario_id); closeCompare(); } },
-    }, cols.map(([, get]) => el('td', { text: get(r) })))));
-    ui.compareTable.replaceChildren(head, body);
+    const details = [
+      ['Plan', (r) => r.label],
+      ['Spacing', (r) => `${fmt.num(r.spacing_m, 1)} m`], ['Side', (r) => r.side],
+      ['Species', (r) => speciesShort(r.species_id)], ['Placement', (r) => r.mode === 'pack' ? 'Fit around obstacles' : 'Even spacing'],
+      ['Mature crown diameter', (r) => `${fmt.num(r.crown_diameter_m, 1)} m`],
+      ['No conflicts', (r) => fmt.int(r.valid)],
+      ['New crown area', (r) => `${fmt.grouped(r.new_crown_area_30_m2)} m²`],
+      ['Street 30 y', (r) => fmt.pct(r.cover_street_pct_30)], ['Sidewalk 30 y', (r) => fmt.pct(r.sidewalk_under_crown_pct_30)],
+      ['Existing-tree source', (r) => r.tree_source || 'See street sources'],
+    ];
+    const renderTable = (columns, table) => {
+      const choose = async (id) => { if (await selectScenarioById(id)) closeCompare(); };
+      const head = el('thead', {}, el('tr', {}, columns.map(([h]) => el('th', { scope: 'col', text: h }))));
+      const body = el('tbody', {}, (res.rows || []).map((r) => el('tr', {
+        class: [r.scenario_id === res.best_by_cover ? 'best' : '', r.scenario_id === state.activeScenarioId ? 'active' : ''].join(' ').trim(),
+        tabindex: '0',
+        onclick: () => choose(r.scenario_id),
+        onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(r.scenario_id); } },
+      }, columns.map(([, get]) => el('td', { text: get(r) })))));
+      table.replaceChildren(head, body);
+    };
+    renderTable(cols, ui.compareTable);
+    renderTable(details, $('compare-details-table'));
     ui.compareNote.textContent = res.best_by_cover
-      ? 'Figures at year 30. Highlighted row has the best corridor cover. Click a row to show it on the map.'
-      : 'Figures at year 30. Click a row to show it on the map.';
+      ? 'Estimates at year 30 for the same street. Highlighted row has the highest study area tree cover, including amber positions. Select a row to show it on the map.'
+      : 'Estimates at year 30. Different streets or data snapshots are not ranked. Select a row to show it on the map.';
     ui.compareModal.hidden = false;
+    document.querySelector('.workspace').inert = true;
+    document.querySelector('.app-header').inert = true;
+    ui.agent.inert = true;
     ui.compareClose.focus();
   }
 
   function closeCompare() {
     if (ui.compareModal.hidden) return;
     ui.compareModal.hidden = true;
-    ui.compareBtn.focus();
+    document.querySelector('.workspace').inert = false;
+    document.querySelector('.app-header').inert = false;
+    ui.agent.inert = false;
+    (ui.compareBtn.disabled ? ui.assistantClose : ui.compareBtn).focus();
   }
 
   function speciesShort(id) {
@@ -972,8 +1344,8 @@
     if (!sc) { ui.readout.replaceChildren(el('span', {}, [document.createTextNode('Year '), strong(String(year)), document.createTextNode(' · no plan yet')])); return; }
     ui.readout.replaceChildren(
       document.createTextNode('Year '), strong(String(year)),
-      document.createTextNode(' · canopy '), strong(fmt.pct(coverAt(sc, state.year))),
-      document.createTextNode(' of corridor · '), strong(fmt.int(sc.summary && sc.summary.planted)),
+      document.createTextNode(' · tree cover '), strong(fmt.pct(coverAt(sc, state.year))),
+      document.createTextNode(' · '), strong(fmt.int(sc.summary && sc.summary.planted)),
       document.createTextNode(' trees'),
     );
   }
@@ -983,7 +1355,7 @@
     if (!fromSlider) ui.year.value = String(state.year);
     if (map.getLayer('crowns')) map.setPaintProperty('crowns', 'circle-radius', radiusExpr(crownMetresExpr(state.year)));
     renderYearReadout();
-    if (state.shade.enabled) scheduleShade();
+    if (state.shade.enabled) { invalidateShade(); scheduleShade(); }
   }
 
   function stopAnimation() {
@@ -1013,10 +1385,20 @@
   function setShadeEnabled(on) {
     state.shade.enabled = on;
     ui.shade.setAttribute('aria-pressed', String(on));
+    ui.shade.lastChild.textContent = on ? 'Hide shade' : 'Show shade';
     const box = ui.legendToggles.find((cb) => cb.dataset.layer === 'shade');
     if (box) box.checked = on;
     if (map.getLayer('shade-fill')) map.setLayoutProperty('shade-fill', 'visibility', on ? 'visible' : 'none');
-    if (on) fetchShade(); else { clearTimeout(state.shade.timer); renderShadeInfo(null); }
+    invalidateShade();
+    if (on) fetchShade();
+  }
+
+  function invalidateShade() {
+    clearTimeout(state.shade.timer);
+    state.shade.seq += 1;
+    state.shade.result = null;
+    setSourceData('shade', emptyFc());
+    renderShadeInfo(null);
   }
 
   function scheduleShade() {
@@ -1029,16 +1411,25 @@
     const sc = activeScenario();
     if (!sc || !state.shade.enabled) return;
     const seq = ++state.shade.seq;
-    const body = { scenario_id: sc.scenario_id, year: Math.round(state.year), ...SHADE_WHEN, include_existing: true };
+    const body = { scenario_id: sc.scenario_id, year: Math.round(state.year), ...state.shade.when, include_existing: true };
+    ui.shadeInfo.textContent = 'Calculating shade…';
     try {
       const res = await api('/api/shade', { method: 'POST', body });
-      if (seq === state.shade.seq && state.shade.enabled) applyShade(res);
+      if (seq === state.shade.seq && state.shade.enabled && sc.scenario_id === state.activeScenarioId && body.year === Math.round(state.year)) applyShade(res);
     } catch (err) {
-      if (seq === state.shade.seq) setError(`Shade: ${err.message}`);
+      if (seq === state.shade.seq) { renderShadeInfo(null); setError(`Shade: ${err.message}`); }
     }
   }
 
   function applyShade(res) {
+    if (res.scenario_id !== state.activeScenarioId) return;
+    invalidateShade();
+    state.year = res.year;
+    ui.year.value = String(res.year);
+    if (map.getLayer('crowns')) map.setPaintProperty('crowns', 'circle-radius', radiusExpr(crownMetresExpr(state.year)));
+    renderYearReadout();
+    const when = /\d{4}-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(res.when || '');
+    if (when) state.shade.when = { month: Number(when[1]), day: Number(when[2]), hour: Number(when[3]) + Number(when[4]) / 60 };
     state.shade.result = res;
     setSourceData('shade', res.shadows || emptyFc());
     renderShadeInfo(res);
@@ -1119,7 +1510,7 @@
     });
     const meta = el('span', { class: 'rule-meta' }, [
       el('span', { text: ruleCitation(rule, pack) }),
-      rule.assumption ? el('span', { class: 'tag', text: 'planning default' }) : null,
+      rule.assumption && ruleCitation(rule, pack) !== 'planning default' ? el('span', { class: 'tag', text: 'planning default' }) : null,
       rule.overridden ? el('span', { class: 'tag tag-edited', text: 'edited' }) : null,
     ]);
     return el('li', { class: `rule${rule.enabled ? '' : ' off'}`, title: rule.quote || rule.description || '' }, [
@@ -1130,7 +1521,9 @@
 
   /** PUT /api/rules/{pack}/{rule}; on success re-run the active plan under the new rules. */
   async function overrideRule(ruleId, patch) {
-    if (!state.pack) return;
+    if (!state.pack || state.updatingRules || state.planning || state.loadingStreet || state.agent.streaming) return;
+    state.updatingRules = true;
+    renderWorkflow();
     try {
       const res = await api(`/api/rules/${encodeURIComponent(state.pack.id)}/${encodeURIComponent(ruleId)}`, { method: 'PUT', body: patch });
       setRulePack(res.pack || withOverrides(state.pack, { [ruleId]: patch }));
@@ -1139,10 +1532,16 @@
     } catch (err) {
       setError(`Rule: ${err.message}`);
       renderRules();
+    } finally {
+      state.updatingRules = false;
+      renderWorkflow();
     }
   }
 
   async function resetOverrides() {
+    if (state.updatingRules || state.planning || state.loadingStreet || state.agent.streaming) return;
+    state.updatingRules = true;
+    renderWorkflow();
     setBusy(ui.rulesReset, true);
     try {
       await api('/api/rules/overrides', { method: 'DELETE' });
@@ -1153,6 +1552,8 @@
       setError(`Rules: ${err.message}`);
     } finally {
       setBusy(ui.rulesReset, false);
+      state.updatingRules = false;
+      renderWorkflow();
     }
   }
 
@@ -1176,6 +1577,7 @@
     const p = sc.params || {};
     await runPlan({
       spacing_m: p.spacing_m, side: p.side, species_id: p.species_id, mode: p.mode,
+      crown_diameter_m: p.crown_diameter_m,
       offset_from_edge_m: p.offset_from_edge_m, pit_width_m: p.pit_width_m,
       rule_pack_id: p.rule_pack_id, label: p.label || null,
     }, { replaceId: sc.scenario_id });
@@ -1189,18 +1591,18 @@
     let buffer = '';
     let eventName = 'message';
     let dataLines = [];
-    const dispatch = () => {
+    const dispatch = async () => {
       if (dataLines.length) {
         const raw = dataLines.join('\n');
         let data = raw;
         try { data = JSON.parse(raw); } catch (_) { /* keep raw text */ }
-        onEvent(eventName, data);
+        await onEvent(eventName, data);
       }
       eventName = 'message';
       dataLines = [];
     };
-    const handleLine = (line) => {
-      if (line === '') { dispatch(); return; }
+    const handleLine = async (line) => {
+      if (line === '') { await dispatch(); return; }
       if (line.startsWith(':')) return;
       const idx = line.indexOf(':');
       const field = idx === -1 ? line : line.slice(0, idx);
@@ -1214,14 +1616,14 @@
       buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
       let nl = buffer.indexOf('\n');
       while (nl !== -1) {
-        handleLine(buffer.slice(0, nl).replace(/\r$/, ''));
+        await handleLine(buffer.slice(0, nl).replace(/\r$/, ''));
         buffer = buffer.slice(nl + 1);
         nl = buffer.indexOf('\n');
       }
       if (done) break;
     }
-    if (buffer) handleLine(buffer.replace(/\r$/, ''));
-    dispatch();
+    if (buffer) await handleLine(buffer.replace(/\r$/, ''));
+    await dispatch();
   }
 
   /** "plan_trees · spacing 8 m · both" from a tool name and its arguments. */
@@ -1252,12 +1654,15 @@
     const root = el('div', { class: 'msg-assistant' });
     ui.messages.append(root);
     let textNode = null;
+    let textBuffer = '';
+    const traceDetails = el('details', { class: 'agent-actions' }, el('summary', { text: 'Planning actions' }));
     const rows = new Map();
     let lastRow = null;
     return {
       appendText(delta) {
-        if (!textNode) { textNode = el('p', { class: 'msg-text' }); root.append(textNode); }
-        textNode.textContent += delta;
+        if (!textNode) { textNode = el('p', { class: 'msg-text' }); textBuffer = ''; root.append(textNode); }
+        textBuffer += delta;
+        textNode.replaceChildren(...textBuffer.split(/(\*\*[^*]+\*\*)/g).map(part => part.startsWith('**') && part.endsWith('**') ? el('strong', { text: part.slice(2, -2) }) : document.createTextNode(part)));
         scrollChat();
       },
       addTool(id, name, args) {
@@ -1269,7 +1674,8 @@
         ]);
         rows.set(id || name, row);
         lastRow = row;
-        root.append(row);
+        if (!traceDetails.isConnected) root.append(traceDetails);
+        traceDetails.append(row);
         scrollChat();
       },
       finishTool(data) {
@@ -1310,7 +1716,7 @@
         applyShade(p);
         break;
       case 'compare': showCompare(p); break;
-      case 'rules': if (p.rules) setRulePack(p); break;
+      case 'rules': if (p.rules) { setRulePack(p); renderWorkflow(); } break;
       case 'site': focusSite(p.site_id); break;
       default: break;
     }
@@ -1322,17 +1728,18 @@
       case 'set_year': setYear(Number(ev.year)); break;
       case 'show_layer': setLayerVisible(ev.layer, ev.visible !== false); break;
       case 'select_scenario': await selectScenarioById(ev.scenario_id); break;
-      case 'open_compare': openCompare(); break;
+      case 'open_compare': break; // The following compare payload contains the requested plans.
       default: break;
     }
   }
 
   async function selectScenarioById(id) {
-    if (!id) return;
+    if (!id) return false;
     if (!state.scenarios.some((s) => s.scenario_id === id)) {
-      try { addScenario(await api(`/api/scenarios/${encodeURIComponent(id)}`)); } catch (err) { setError(`Scenario: ${err.message}`); return; }
+      try { addScenario(await api(`/api/scenarios/${encodeURIComponent(id)}`)); } catch (err) { setError(`Scenario: ${err.message}`); return false; }
     }
     selectScenario(id);
+    return state.activeScenarioId === id;
   }
 
   function flyTo(target, zoom) {
@@ -1344,13 +1751,13 @@
     if (typeof target === 'string' && !focusSite(target, zoom)) setError(`Site ${target} is not in the scenario on the map.`);
   }
 
-  function handleAgentEvent(turn, name, data) {
+  async function handleAgentEvent(turn, name, data) {
     const d = data && typeof data === 'object' ? data : {};
     switch (name) {
       case 'text': if (typeof d.delta === 'string') turn.appendText(d.delta); break;
       case 'tool': turn.addTool(d.id, d.name, d.args); break;
       case 'result': turn.finishTool(d); applyAgentResult(d); break;
-      case 'ui': applyUiEvent(d); break;
+      case 'ui': await applyUiEvent(d); break;
       case 'done': renderQuota(d.turns_remaining_hour, d.usage); break;
       case 'error': turn.error(d.message || 'Agent error'); setError(`Agent: ${d.message || 'unknown error'}`); break;
       default: break;
@@ -1360,18 +1767,19 @@
   function renderQuota(turnsLeft, usage) {
     const bits = [];
     if (turnsLeft != null) bits.push(`${turnsLeft} agent turns left this hour`);
-    if (usage && usage.input_tokens != null) bits.push(`${fmt.grouped(usage.input_tokens)} in / ${fmt.grouped(usage.output_tokens)} out tokens`);
     ui.agentFoot.textContent = bits.join(' · ');
   }
 
   /** POST /api/agent and stream the turn; the rest of the UI stays live meanwhile. */
   async function sendChat(text) {
     const message = text.trim();
-    if (!message || state.agent.streaming) return;
+    if (!message || state.agent.streaming || state.loadingStreet || state.planning || state.updatingRules) return;
+    if (state.draw.active) stopDraw();
     addUserMessage(message);
     ui.chatInput.value = '';
     state.agent.streaming = true;
-    ui.send.disabled = true;
+    ui.promptChips.hidden = true;
+    renderWorkflow();
     const turn = newTurn();
     const body = { message, street_id: state.street ? state.street.street_id : null, scenario_id: state.activeScenarioId };
     try {
@@ -1385,14 +1793,14 @@
     } finally {
       turn.finish();
       state.agent.streaming = false;
-      ui.send.disabled = false;
+      renderWorkflow();
       ui.chatInput.focus();
     }
   }
 
   function renderAgent(agent) {
     const enabled = Boolean(agent && agent.enabled);
-    ui.agentMeta.textContent = enabled ? [agent.provider, agent.model].filter(Boolean).join(' · ') : 'offline';
+    ui.agentMeta.textContent = enabled ? 'Describe a change or ask which planting recommendations are not met.' : 'Currently unavailable';
     ui.agentOffline.hidden = enabled;
     ui.chatForm.hidden = !enabled;
     ui.promptChips.hidden = !enabled;
@@ -1400,7 +1808,7 @@
     ui.promptChips.replaceChildren(...(agent.example_prompts || []).map((p) => el('button', {
       type: 'button', class: 'chip', text: p, title: p, onclick: () => sendChat(p),
     })));
-    ui.messages.append(el('p', { class: 'msg-text msg-hello', text: 'Ask for a street, a spacing, a species or a rule change. Every number comes from a tool call you can see below.' }));
+    ui.messages.append(el('p', { class: 'msg-text msg-hello', text: 'I can help you explore a street, adjust your plan, or explain planting rules. Try a suggestion below or ask about the current plan.' }));
   }
 
   async function loadQuota() {
@@ -1414,18 +1822,25 @@
   function renderSpeciesHint() {
     const sp = state.config && state.config.species.find((s) => s.id === ui.species.value);
     ui.speciesHint.textContent = sp
-      ? `${sp.name_de} · ${sp.name_en} · ${sp.size_class} · mature crown ${fmt.num(sp.mature_crown_d_m, 0)} m · height ${fmt.num(sp.mature_height_m, 0)} m`
+      ? `${sp.name_lat} · About ${fmt.num(sp.mature_crown_d_m, 0)} m wide and ${fmt.num(sp.mature_height_m, 0)} m tall when mature.`
       : '';
+    const diameter = Number($('crown-size').value);
+    $('crown-size-out').textContent = `${fmt.num(diameter, 1)} m`;
+    $('crown-size').setAttribute('aria-valuetext', `${fmt.num(diameter, 1)} metres across the mature crown`);
+    $('crown-assumption').textContent = sp && diameter !== sp.mature_crown_d_m
+      ? `Custom planning size. Species height stays ${fmt.num(sp.mature_height_m, 0)} m; actual crown growth may differ. Choosing another species resets this size.`
+      : 'Uses the species’ approximate mature size. The year slider shows growth towards this size.';
   }
 
   function renderConfig(cfg) {
     ui.city.replaceChildren(...cfg.cities.map((c) => el('option', { value: c.id, text: c.name })));
-    ui.species.replaceChildren(...cfg.species.map((sp) => el('option', {
-      value: sp.id, text: `${sp.name_lat} · ${sp.size_class} · ${fmt.num(sp.mature_crown_d_m, 0)} m crown`,
+    ui.species.replaceChildren(...[...cfg.species].sort((a, b) => a.mature_crown_d_m - b.mature_crown_d_m).map((sp) => el('option', {
+      value: sp.id, text: `${sp.name_en} · ${fmt.num(sp.mature_crown_d_m, 0)} m crown`,
     })));
     const d = cfg.defaults || {};
     if (d.spacing_m != null) { ui.spacing.value = String(d.spacing_m); ui.spacingOut.textContent = `${fmt.num(d.spacing_m, 1)} m`; }
     if (d.species_id) ui.species.value = d.species_id;
+    $('crown-size').value = String(d.crown_diameter_m ?? cfg.species.find((s) => s.id === ui.species.value)?.mature_crown_d_m ?? 10);
     for (const name of ['side', 'mode']) {
       const r = ui.planForm.querySelector(`input[name="${name}"][value="${d[name]}"]`);
       if (r) r.checked = true;
@@ -1436,16 +1851,79 @@
   }
 
   function wireUi() {
+    $('temperature-form').addEventListener('submit', (event) => { event.preventDefault(); compareTemperature(); });
+    $('temperature-form').addEventListener('input', () => { invalidateTemperature(); renderWorkflow(); });
+    $('go-temperature').addEventListener('click', () => {
+      $('temperature-card').open = true;
+      $('temperature-title').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
+      $('reference-air').focus({ preventScroll: true });
+    });
+    $('temperature-map').addEventListener('click', () => {
+      const result = state.temperature.result;
+      if (!result || result.scenario_id !== state.activeScenarioId) return;
+      stopAnimation();
+      state.shade.when = { month: Number($('temperature-month').value), day: Number($('temperature-day').value), hour: Number($('temperature-hour').value) };
+      setYear(result.year);
+      setShadeEnabled(true);
+      ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+      fitToBbox(state.street.bbox);
+    });
+    $('undo-draw').addEventListener('click', () => { state.draw.points.pop(); renderDraw(); });
+    $('review-result').addEventListener('click', () => {
+      $('result-title').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
+      $('go-temperature').focus({ preventScroll: true });
+    });
+    $('refresh-tree-data').addEventListener('click', () => {
+      if (!state.street || state.loadingStreet || state.planning) return;
+      const axis = state.street.layers.axis.features[0];
+      if (!axis || axis.geometry.type !== 'LineString') { setError('Cannot retry without a street line. Explore the street again.'); return; }
+      // Reuse the same street line to rebuild its data instead of reusing the cached OSM fallback.
+      loadStreetAndPlan({ city: state.street.city, line: axis.geometry.coordinates, name: state.street.name }, { fallback: false });
+    });
+    $('show-existing').addEventListener('click', () => {
+      const toggle = ui.legendToggles.find(cb => cb.dataset.layer === 'existing_trees');
+      if (toggle) toggle.checked = true;
+      setLayerVisible('existing_trees', true);
+      ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+      fitToBbox(state.street && state.street.bbox);
+    });
+    $('finish-draw').addEventListener('click', finishDraw);
+    $('cancel-draw').addEventListener('click', stopDraw);
+    $('back-to-plan').addEventListener('click', () => {
+      const target = state.street ? ui.planForm : ui.header;
+      target.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
+      (state.street ? ui.spacing : ui.city).focus({ preventScroll: true });
+    });
+    ui.assistantToggle.addEventListener('click', () => toggleAssistant(ui.agent.hidden));
+    ui.assistantClose.addEventListener('click', () => toggleAssistant(false));
+    ui.fitStreet.addEventListener('click', () => fitToBbox(state.street && state.street.bbox));
+    ui.viewPlan.addEventListener('click', () => {
+      ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+      fitToBbox(state.street && state.street.bbox);
+      ui.map.focus({ preventScroll: true });
+    });
+    ui.planForm.addEventListener('input', updatePlanDraft);
     ui.city.addEventListener('change', () => selectCity(ui.city.value));
     ui.searchForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const q = ui.search.value.trim();
       if (q) loadStreetAndPlan({ city: state.cityId, query: q }, { fallback: false });
     });
-    ui.draw.addEventListener('click', () => (state.draw.active ? finishDraw() : startDraw()));
+    ui.draw.addEventListener('click', () => (state.draw.active ? stopDraw() : startDraw()));
+    $('pick-street').addEventListener('click', () => {
+      if (state.draw.active) stopDraw();
+      setStreetPicking(!state.pickingStreet);
+      if (state.pickingStreet) ui.map.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
     ui.spacing.addEventListener('input', () => { ui.spacingOut.textContent = `${fmt.num(ui.spacing.value, 1)} m`; });
-    ui.species.addEventListener('change', renderSpeciesHint);
-    ui.planForm.addEventListener('submit', (e) => { e.preventDefault(); runPlan(formParams()); });
+    ui.species.addEventListener('change', () => {
+      const species = state.config.species.find((s) => s.id === ui.species.value);
+      $('crown-size').value = String(species.mature_crown_d_m);
+      renderSpeciesHint();
+      updatePlanDraft();
+    });
+    $('crown-size').addEventListener('input', renderSpeciesHint);
+    ui.planForm.addEventListener('submit', (e) => { e.preventDefault(); if (!ui.planBtn.disabled) runPlan(formParams()); });
     ui.rulesReset.addEventListener('click', resetOverrides);
     ui.compareBtn.addEventListener('click', openCompare);
     ui.compareClose.addEventListener('click', closeCompare);
@@ -1457,19 +1935,29 @@
     for (const cb of ui.legendToggles) cb.addEventListener('change', () => setLayerVisible(cb.dataset.layer, cb.checked));
     ui.chatForm.addEventListener('submit', (e) => { e.preventDefault(); sendChat(ui.chatInput.value); });
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab' && !ui.compareModal.hidden) {
+        const controls = Array.from(ui.compareModal.querySelectorAll('button, summary, [tabindex="0"]'))
+          .filter(control => !control.disabled && control.getClientRects().length > 0);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
       if (e.key !== 'Escape') return;
       if (!ui.compareModal.hidden) { closeCompare(); return; }
+      if (!ui.agent.hidden) { toggleAssistant(false); return; }
       if (state.draw.active) { stopDraw(); return; }
+      if (state.pickingStreet) { setStreetPicking(false); return; }
       if (state.pinPopup) state.pinPopup.remove();
     });
     REDUCED_MOTION.addEventListener('change', () => { if (REDUCED_MOTION.matches && state.anim) { stopAnimation(); setYear(MAX_YEAR); } });
   }
 
-  /** First frame: config -> first city -> its first demo street -> default plan -> year 30. */
+  /** Prepare the map and controls; let the planner choose their own street. */
   async function boot() {
     collectUi();
     wireUi();
     renderStatus();
+    renderWorkflow();
     await mapReady;
     addIcons();
     addSources();
@@ -1490,8 +1978,10 @@
     const city = cfg.cities[0];
     if (!city) { setError('The server lists no cities.'); return; }
     selectCity(city.id, { silent: true });
-    const street = await loadStreet({ city: city.id, query: firstDemoStreet(city.id) }, { fallback: true });
-    if (street) await runPlan(formParams());
+    map.jumpTo({ center: city.center, zoom: city.zoom });
+    setStreetPicking(city.id !== 'demo');
+    ui.search.placeholder = `Street name in ${city.name}`;
+    renderWorkflow();
     setYear(MAX_YEAR);
   }
 

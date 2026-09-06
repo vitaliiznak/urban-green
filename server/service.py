@@ -28,6 +28,7 @@ from .engine.rules import apply_overrides, load_rule_packs
 from .engine.shade import shade_polygons
 from .engine.sites import SiteGeom, plan_sites
 from .engine.species import load_species, species_or_default
+from .engine.temperature import temperature_comparison
 from .schemas import (
     YEARS,
     CanopyRequest,
@@ -48,6 +49,8 @@ from .schemas import (
     Species,
     StreetRequest,
     StreetResponse,
+    TemperatureRequest,
+    TemperatureResult,
 )
 from .session import Session
 
@@ -196,7 +199,7 @@ def species_short(sp: Species) -> str:
 
 
 def default_label(params: PlanParams, sp: Species) -> str:
-    return f"{params.spacing_m:g} m · {species_short(sp)} · {params.side} · {params.mode}"
+    return f"{params.spacing_m:g} m · {species_short(sp)} · {sp.mature_crown_d_m:g} m crown · {params.side} · {params.mode}"
 
 
 # ---------------------------------------------------------------------- streets
@@ -208,6 +211,9 @@ async def load_street(req: StreetRequest) -> StreetResponse:
         adapter = get_adapter(req.city)
     except KeyError:
         raise ApiError(404, "unknown_city", f"Unknown city '{req.city}'. Known: {', '.join(ADAPTERS)}.") from None
+    if req.point is not None:
+        ctx = await _guard_upstream(adapter.street_from_point(req.point))
+        return _register_street(ctx, None)
     if req.line is not None:
         if len(req.line) < 2:
             raise ApiError(400, "bad_request", "A drawn street needs at least two points.")
@@ -291,6 +297,8 @@ def plan(req: PlanRequest, session: Session) -> ScenarioResponse:
     overrides = merged_overrides(session, req.rule_overrides)
     pack = rule_pack(req.rule_pack_id, overrides)
     sp = species(req.species_id)
+    if req.crown_diameter_m is not None:
+        sp = sp.model_copy(update={"mature_crown_d_m": req.crown_diameter_m})
     params = PlanParams(**req.model_dump(exclude={"street_id", "rule_overrides", "label"}), rule_overrides=overrides)
     params.label = req.label or default_label(params, sp)
     sites, summary = plan_sites(ctx, params, pack, sp)
@@ -339,20 +347,37 @@ def shade(req: ShadeRequest) -> ShadeResult:
 
 
 def compare(req: CompareRequest) -> CompareResponse:
-    """Side-by-side table of scenarios; best = highest corridor cover at 30 years."""
+    """Compare scenarios, ranking cover only when they share a street context."""
     rows = [compare_row(STORE.get_scenario(sid).response) for sid in req.scenario_ids]
-    best = max(rows, key=lambda r: r.cover_corridor_pct_30).scenario_id if rows else None
+    same_street = len({row.street_id for row in rows}) == 1
+    best = max(rows, key=lambda r: r.cover_corridor_pct_30).scenario_id if same_street else None
     return CompareResponse(rows=rows, best_by_cover=best)
+
+
+def temperature(req: TemperatureRequest) -> TemperatureResult:
+    scenario = STORE.get_scenario(req.scenario_id)
+    ctx = STORE.get_street(scenario.ctx_id)
+    try:
+        return temperature_comparison(ctx, scenario.sites, scenario.response.species, req)
+    except ValueError as exc:
+        raise ApiError(422, "temperature_unavailable", str(exc)) from exc
 
 
 def compare_row(resp: ScenarioResponse) -> CompareRow:
     year30 = _year_entry(resp, 30)
+    street = STORE.get_street_response(resp.street_id)
     return CompareRow(
         scenario_id=resp.scenario_id,
+        street_id=street.street_id,
+        street_name=street.name,
+        city=street.city,
+        city_name=street.city_name,
+        tree_source=street.layer_sources.get("existing_trees", "Unknown"),
         label=resp.label,
         spacing_m=resp.params.spacing_m,
         side=resp.params.side,
         species_id=resp.params.species_id,
+        crown_diameter_m=resp.species.mature_crown_d_m,
         mode=resp.params.mode,
         planted=resp.summary.planted,
         valid=resp.summary.valid,

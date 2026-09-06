@@ -3,9 +3,9 @@ and the engine. Every JSON that crosses the wire is one of these models.
 Geometry on the wire is always GeoJSON in WGS84 (lon, lat)."""
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 Side = Literal["left", "right"]
 SideChoice = Literal["both", "left", "right"]
@@ -109,6 +109,14 @@ class StreetRequest(BaseModel):
     query: Optional[str] = Field(None, max_length=120, description="street name, e.g. 'Langstrasse'")
     line: Optional[list[list[float]]] = Field(None, description="user-drawn axis [[lon,lat],...] in WGS84")
     name: Optional[str] = None
+    point: Optional[tuple[Annotated[float, Field(ge=-180, lt=180, allow_inf_nan=False)],
+                          Annotated[float, Field(ge=-80, le=84, allow_inf_nan=False)]]] = None
+
+    @model_validator(mode="after")
+    def exclusive_point(self):
+        if self.point is not None and (self.query is not None or self.line is not None):
+            raise ValueError("Provide point alone, without query or line")
+        return self
 
 
 class StreetStats(BaseModel):
@@ -144,6 +152,8 @@ class PlanParams(BaseModel):
     spacing_m: float = Field(8.0, ge=3, le=40)
     side: SideChoice = "both"
     species_id: str = "tilia_cordata"
+    crown_diameter_m: Optional[float] = Field(None, ge=2, le=25, allow_inf_nan=False,
+        description="Optional mature crown diameter for this planning scenario; not a species prediction")
     mode: Mode = "grid"
     offset_from_edge_m: float = Field(1.0, ge=0.3, le=5.0, description="carriageway edge -> trunk centre")
     pit_width_m: float = Field(2.0, ge=1.0, le=4.0, description="tree pit width across the sidewalk")
@@ -263,12 +273,48 @@ class CompareRequest(BaseModel):
     scenario_ids: list[str] = Field(min_length=1, max_length=6)
 
 
+class TemperatureRequest(BaseModel):
+    scenario_id: str
+    year: int = Field(30, ge=0, le=30)
+    reference_air_c: float = Field(30, ge=0, le=55, allow_inf_nan=False)
+    month: int = Field(7, ge=6, le=8)
+    day: int = Field(15, ge=1, le=31)
+    hour: float = Field(15, ge=6, le=18, allow_inf_nan=False)
+
+
+class TemperatureResult(BaseModel):
+    scenario_id: str
+    year: int
+    when: str
+    reference_air_c: float
+    proposed_air_c: float
+    proposed_air_low_c: float
+    proposed_air_high_c: float
+    cooling_c: float
+    cooling_low_c: float
+    cooling_high_c: float
+    existing_local_canopy_pct: float
+    proposed_local_canopy_pct: float
+    existing_sidewalk_shade_pct: float
+    proposed_sidewalk_shade_pct: float
+    sample_count: int
+    method: str
+    source_url: str
+    limitations: list[str]
+
+
 class CompareRow(BaseModel):
     scenario_id: str
+    street_id: str
+    street_name: str
+    city: str
+    city_name: str
+    tree_source: str
     label: str
     spacing_m: float
     side: SideChoice
     species_id: str
+    crown_diameter_m: float
     mode: Mode
     planted: int
     valid: int

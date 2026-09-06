@@ -6,3 +6,7 @@ __pycache__/
 .cache/
 .claude/
 .uvicorn-*.log
+
+# Local browser verification artifacts
+.playwright-cli/
+output/

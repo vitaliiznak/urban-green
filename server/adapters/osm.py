@@ -335,7 +335,8 @@ def overpass_area_query(bboxes: list[BBox]) -> str:
     """Highways, buildings and trees inside the union of the given bboxes."""
     body = "".join(
         f'way["highway"]({_ql_bbox(b)});way["building"]({_ql_bbox(b)});'
-        f'node["natural"="tree"]({_ql_bbox(b)});' for b in bboxes)
+        f'node["natural"="tree"]({_ql_bbox(b)});'
+        f'node["highway"="crossing"]({_ql_bbox(b)});' for b in bboxes)
     return f"[out:json][timeout:25];({body});out tags geom;"
 
 
@@ -722,7 +723,13 @@ def find_junctions(axis: LineString, highways: list[tuple[dict[str, Any], LineSt
     """Points where other streets touch or cross the axis, merged within 3 m, by station."""
     found: list[Point] = []
     for el, ln in highways:
-        if el.get("id") in exclude_ids or is_minor_way(el.get("tags") or {}):
+        tags = el.get("tags") or {}
+        crossing = tags.get("footway") == "crossing" or tags.get("cycleway") == "crossing"
+        if el.get("id") in exclude_ids or (is_minor_way(tags) and not crossing):
+            continue
+        axis_layers = {str((other.get("tags") or {}).get("layer", "0"))
+                       for other, line in highways if other.get("id") in exclude_ids and line.distance(ln) <= 0.5}
+        if axis_layers and str(tags.get("layer", "0")) not in axis_layers:
             continue
         inter = ln.intersection(axis)
         pts = _points_of(inter)
@@ -790,6 +797,13 @@ def build_osm_layers(axis: LineString, data: dict[str, Any], epsg: int, *,
 
     plantable = _polygonal(make_valid(sidewalks.difference(buildings).difference(carriageway)))
     junctions = find_junctions(axis, highways, set(axis_ids), clip)
+    for el in data.get("elements") or []:
+        if el.get("type") == "node" and (el.get("tags") or {}).get("highway") == "crossing":
+            if el.get("lon") is None or el.get("lat") is None:
+                continue
+            pt = crs.to_metric(Point(el["lon"], el["lat"]), epsg)
+            if clip.covers(pt) and axis.distance(pt) <= 3.0 and all(pt.distance(p) > JUNCTION_MERGE_M for p in junctions):
+                junctions.append(pt)
     trees = trees_from_elements(tree_els, epsg, clip)
     return OsmLayers(carriageway=carriageway, sidewalks=sidewalks, plantable=plantable,
                      buildings=buildings, cycleways=cycleways, junctions=junctions, trees=trees,
@@ -899,6 +913,56 @@ async def resolve_street_axis(street: str, *, city_bbox: BBox, epsg: int,
     return ResolvedAxis(axis=axis, name=name, way_ids=used, warnings=warnings)
 
 
+async def resolve_street_point(point: tuple[float, float], *, epsg: int,
+                               city_bbox: BBox | None = None) -> ResolvedAxis:
+    """Snap a click to an actual road within 30 m; retain the clicked section."""
+    lon, lat = point
+    if city_bbox and not (city_bbox[0] <= lon <= city_bbox[2] and city_bbox[1] <= lat <= city_bbox[3]):
+        raise StreetNotFound("Click inside the selected city, or choose Anywhere (OSM).")
+    anchor = crs.to_metric(Point(lon, lat), epsg)
+    bbox = crs.to_wgs(anchor.buffer(40), epsg).bounds
+    query = f'[out:json][timeout:25];way["highway"]({_ql_bbox(bbox)});out tags geom;'
+    data = await overpass(query, urls=overpass_urls_for(epsg))
+    candidates = []
+    for el in data.get("elements") or []:
+        tags = el.get("tags") or {}
+        if el.get("type") != "way" or not tags.get("highway") or not is_axis_candidate(tags):
+            continue
+        line = way_line(el, epsg)
+        if line is not None and line.length >= 1 and line.distance(anchor) <= 30:
+            candidates.append((el, line))
+    if not candidates:
+        raise StreetNotFound("No mapped street within 30 m. Zoom in and click the street centreline.")
+    seed, axis = min(candidates, key=lambda pair: (pair[1].distance(anchor), pair[0]["id"]))
+    name = (seed.get("tags") or {}).get("name") or "Unnamed street"
+    warnings: list[str] = []
+    pairs = [(seed, axis)]
+    if name != "Unnamed street":
+        # Query locally, avoiding distant streets that happen to share a name.
+        try:
+            nearby = await overpass(overpass_name_query(name, crs.to_wgs(anchor.buffer(MAX_AXIS_M), epsg).bounds),
+                                    urls=overpass_urls_for(epsg))
+            pairs += [(el, line) for el in nearby.get("elements") or []
+                      if el.get("type") == "way" and el.get("id") != seed["id"]
+                      and is_axis_candidate(el.get("tags") or {})
+                      and (line := way_line(el, epsg)) is not None]
+            merged = linemerge([line for _, line in pairs])
+            parts = list(merged.geoms) if isinstance(merged, MultiLineString) else [merged]
+            snapped = axis.interpolate(axis.project(anchor))
+            containing = [part for part in parts if part.distance(snapped) < 0.01]
+            if containing:
+                axis = max(containing, key=lambda part: part.intersection(pairs[0][1]).length)
+        except UpstreamUnavailable:
+            warnings.append("Only the clicked OpenStreetMap section is available; neighbouring sections could not be loaded.")
+    if axis.length > MAX_AXIS_M:
+        start = min(max(0, axis.project(anchor) - MAX_AXIS_M / 2), axis.length - MAX_AXIS_M)
+        axis = substring(axis, start, start + MAX_AXIS_M)
+        warnings.append("Analysis limited to 2.5 km around the clicked position.")
+    # Substring interpolation may differ by tiny floating-point offsets.
+    ids = [el["id"] for el, line in pairs if line.intersection(axis.buffer(0.01, cap_style="flat")).length > 0.1]
+    return ResolvedAxis(axis=axis, name=name, way_ids=ids, warnings=warnings)
+
+
 async def fetch_area(axis: LineString, epsg: int) -> dict[str, Any]:
     """Overpass payload with every highway, building and tree around the axis corridor."""
     return await overpass(overpass_area_query(corridor_bboxes(axis, epsg)), urls=overpass_urls_for(epsg))
@@ -941,6 +1005,11 @@ class OsmAdapter(CityAdapter):
     """Any street OpenStreetMap covers, in the local UTM zone."""
 
     info = OSM_INFO
+
+    async def street_from_point(self, point: tuple[float, float]) -> StreetContext:
+        epsg = crs.utm_epsg(*point)
+        resolved = await resolve_street_point(point, epsg=epsg)
+        return await self._build(resolved.axis, resolved.name, resolved.way_ids, resolved.warnings, epsg)
 
     async def _city_bbox(self, city: str, fallback: dict[str, Any] | None) -> BBox:
         """Bounding box of the city from Nominatim; else 3 km around the street hit."""

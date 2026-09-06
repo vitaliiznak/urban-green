@@ -8,7 +8,7 @@ import pytest
 from shapely.geometry import Point
 
 from server.engine.canopy import canopy_metrics
-from server.engine.rules import apply_overrides, evaluate_site, load_rule_packs
+from server.engine.rules import MEASURE_EPS, apply_overrides, evaluate_site, load_rule_packs
 from server.engine.shade import shade_polygons, shadow_ellipse, sun_position
 from server.engine.sites import plan_sites
 from server.engine.species import crown_d_at, height_at, impute_crown, load_species, species_or_default
@@ -104,7 +104,7 @@ def test_grid_count_400m_8m_both(grid):
     assert sum(1 for s in sites if s.side == "right") == 50
     assert {s.site_id for s in sites} == {f"{side}{4 + 8 * k:04d}" for side in "LR" for k in range(50)}
     assert summary.planted == summary.valid + summary.conditional
-    assert summary.invalid == 0
+    assert summary.invalid == 11 and summary.planted == 89
 
 
 def test_south_side_valid_except_near_junctions(ctx, grid):
@@ -114,7 +114,7 @@ def test_south_side_valid_except_near_junctions(ctx, grid):
             continue
         near_junction = _junction_distance(ctx, s.station_m) < 10.0
         if near_junction:
-            assert s.verdict == "conditional" and s.props.failed_rules == ["junction"], s.site_id
+            assert s.verdict == "invalid" and "junction_exclusion" in s.props.failed_rules, s.site_id
         else:
             assert s.verdict == "valid", (s.site_id, s.props.failed_rules)
 
@@ -130,22 +130,26 @@ def test_north_side_conditional_at_pushed_building(grid):
             assert "building_crown" not in s.props.failed_rules, s.site_id
 
 
-def test_north_side_existing_trees_conditional(grid):
+def test_north_side_occupied_existing_tree_positions_excluded(grid):
     sites, _ = grid
     by_id = {s.site_id: s for s in sites}
     for station in (100, 108, 116):
-        assert "existing_tree" in by_id[f"L{station:04d}"].props.failed_rules
+        site = by_id[f"L{station:04d}"]
+        assert site.verdict == "invalid"
+        assert set(site.props.failed_rules) == {"existing_tree", "occupied_tree_position"}
     assert "existing_tree" not in by_id["L0092"].props.failed_rules
 
 
 def test_side_street_crossing_is_invalid(ctx, pack, tilia):
     sites, summary = plan_sites(ctx, PlanParams(spacing_m=6, side="both", mode="grid"), pack, tilia)
     invalid = [s for s in sites if s.verdict == "invalid"]
-    assert {s.site_id for s in invalid} == {"L0321", "R0321"}
-    for s in invalid:
+    assert {"L0321", "R0321"} <= {s.site_id for s in invalid}
+    crossing = [s for s in invalid if s.site_id in {"L0321", "R0321"}]
+    for s in crossing:
+        assert "junction_exclusion" in s.props.failed_rules
         assert set(s.props.failed_rules) & {"plantable_surface", "carriageway_edge"}
         assert s.props.edge_distance_m > 10.0     # ray ran along the side street
-    assert summary.invalid == 2 and summary.must_failures == 2
+    assert all(_junction_distance(ctx, s.station_m) >= 10 for s in sites if s.verdict != "invalid")
 
 
 def test_site_props_and_rule_results(grid, tilia):
@@ -173,7 +177,8 @@ def test_cycleway_fails_with_small_offset(ctx, pack, tilia):
     sites, summary = plan_sites(ctx, params, pack, tilia)
     for s in sites:
         if s.station_m < 200:
-            assert "cycleway" in s.props.failed_rules and s.verdict == "conditional", s.site_id
+            assert "cycleway" in s.props.failed_rules
+            assert s.verdict == ("invalid" if _junction_distance(ctx, s.station_m) < 10 else "conditional"), s.site_id
         else:
             assert "cycleway" not in s.props.failed_rules, s.site_id
     assert summary.failures_by_rule["cycleway"] == 25
@@ -184,7 +189,7 @@ def test_single_side_and_evaluate_site_direct(ctx, pack, tilia):
     assert summary.total == 40 and all(s.side == "left" for s in sites)
     x0, y0 = ctx.axis.coords[0]
     verdict, results, notes = evaluate_site(Point(x0 + 52, y0 - 4.5), ctx, pack, tilia, PlanParams())
-    assert verdict == "valid" and len(results) == len(pack.rules) and notes == []
+    assert verdict == "valid" and len(results) == len(pack.rules) + 2 and notes == []
     verdict, results, notes = evaluate_site(Point(x0 + 52, y0 - 30), ctx, pack, tilia, PlanParams())
     assert verdict == "invalid"
     by_rule = {r.rule_id: r for r in results}
@@ -192,7 +197,39 @@ def test_single_side_and_evaluate_site_direct(ctx, pack, tilia):
     assert by_rule["sidewalk_passage"].passed is None and by_rule["sidewalk_passage"].note
 
 
+@pytest.mark.parametrize("disable_spacing_rule", [False, True])
+def test_occupied_trunk_guard_is_independent_of_spacing_rule(ctx, pack, tilia, disable_spacing_rule):
+    active = apply_overrides(pack, {"existing_tree": RuleOverride(enabled=not disable_spacing_rule)})
+    trunk = ctx.existing_trees[0].pt
+    for offset in (0.0, MEASURE_EPS / 2):
+        verdict, results, notes = evaluate_site(Point(trunk.x + offset, trunk.y), ctx, active, tilia, PlanParams())
+        safeguard = next(r for r in results if r.rule_id == "occupied_tree_position")
+        assert verdict == "invalid" and safeguard.passed is False
+        assert safeguard.mode == "must" and safeguard.required_m is None
+        assert safeguard.assumption is True and safeguard.basis == ctx.basis["existing_trees"]
+        assert "not a cited clearance standard" in safeguard.note
+        assert safeguard.note in notes
+        assert any(r.rule_id == "existing_tree" for r in results) is (not disable_spacing_rule)
+
+
+@pytest.mark.parametrize("offset", [MEASURE_EPS * 2, 1.0])
+def test_nearby_trunk_remains_a_spacing_recommendation(ctx, pack, tilia, offset):
+    trunk = ctx.existing_trees[0].pt
+    verdict, results, _ = evaluate_site(Point(trunk.x + offset, trunk.y), ctx, pack, tilia, PlanParams())
+    assert verdict == "conditional"
+    assert [r.rule_id for r in results if r.passed is False] == ["existing_tree"]
+
+
 # ----------------------------------------------------------------------------- pack mode
+def test_pack_avoids_occupied_trunks_when_spacing_recommendation_disabled(ctx, pack, tilia):
+    params = PlanParams(spacing_m=4, side="left", mode="pack",
+                        rule_overrides={"existing_tree": RuleOverride(enabled=False)})
+    sites, summary = plan_sites(ctx, params, pack, tilia)
+    assert summary.planted > 0 and summary.invalid == 0
+    assert all(site.pt.distance(tree.pt) > MEASURE_EPS for site in sites for tree in ctx.existing_trees)
+    assert not any(site.station_m == 100 for site in sites)
+
+
 def test_pack_count_ge_grid_valid(ctx, pack, tilia, grid):
     _, grid_summary = grid
     sites, summary = plan_sites(ctx, PlanParams(spacing_m=8, side="both", mode="pack"), pack, tilia)
@@ -202,7 +239,7 @@ def test_pack_count_ge_grid_valid(ctx, pack, tilia, grid):
         stations = [s.station_m for s in sites if s.side == side]
         assert stations == sorted(stations)
         assert all(b - a >= 8 - 1e-6 for a, b in zip(stations, stations[1:]))
-    assert summary.gaps == []
+    assert summary.gaps and all(g.reason == "junction_exclusion" for g in summary.gaps)
 
 
 def test_pack_records_gaps(ctx, pack, tilia):
@@ -211,7 +248,7 @@ def test_pack_records_gaps(ctx, pack, tilia):
     sites, summary = plan_sites(ctx, params, pack, tilia)
     assert all(s.verdict != "invalid" for s in sites)
     assert all(min(s.pt.distance(j) for j in ctx.junctions) >= 12.0 - 1e-6 for s in sites)
-    assert summary.gaps and all(g.reason == "junction" and g.side == "right" for g in summary.gaps)
+    assert summary.gaps and all(g.reason in {"junction", "junction_exclusion"} and g.side == "right" for g in summary.gaps)
     crossing = [g for g in summary.gaps if g.station_from_m < 320 < g.station_to_m]
     assert len(crossing) == 1 and crossing[0].station_to_m - crossing[0].station_from_m > 16
 
@@ -234,7 +271,8 @@ def test_disabled_rule_is_skipped(ctx, pack, tilia):
     relaxed = apply_overrides(pack, {"junction": RuleOverride(enabled=False)})
     sites, summary = plan_sites(ctx, PlanParams(side="right"), relaxed, tilia)
     assert all("junction" not in {r.rule_id for r in s.props.rules} for s in sites)
-    assert summary.valid == summary.total
+    assert summary.invalid == 4
+    assert all(_junction_distance(ctx, s.station_m) >= 10 for s in sites if s.verdict != "invalid")
 
 
 # ----------------------------------------------------------------------------- canopy
@@ -261,6 +299,18 @@ def test_canopy_excludes_invalid_sites(ctx, pack, tilia):
     assert result.years[0].cover_corridor_pct == result.existing_cover_corridor_pct
 
 
+def test_canopy_excludes_occupied_trunk_candidates(ctx, grid, tilia):
+    sites, summary = grid
+    occupied = [site for site in sites if "occupied_tree_position" in site.props.failed_rules]
+    assert len(occupied) == 3 and all(s.verdict == "invalid" for s in occupied)
+    result = canopy_metrics(ctx, occupied, tilia, years=[0, 30])
+    assert all(row.new_crown_area_m2 == 0.0 for row in result.years)
+    assert all(row.cover_corridor_pct == result.existing_cover_corridor_pct for row in result.years)
+    # The full plan yields exactly the canopy of the accepted candidate subset.
+    accepted = [site for site in sites if site.verdict != "invalid"]
+    assert canopy_metrics(ctx, sites, tilia) == canopy_metrics(ctx, accepted, tilia)
+
+
 # ----------------------------------------------------------------------------- shade
 def test_sun_position_reference_cases():
     elev, az = sun_position(0.0, 0.0, 2026, 3, 20, 12.0, 0.0)
@@ -278,7 +328,7 @@ def test_shade_july_afternoon(ctx, grid, tilia):
     assert 220 <= result.sun_azimuth_deg <= 260
     assert result.when.endswith("-07-15 15:00 local")
     kinds = [f["properties"]["kind"] for f in result.shadows.features]
-    assert kinds.count("new") == 100 and kinds.count("existing") == 3
+    assert kinds.count("new") == 89 and kinds.count("existing") == 3
     assert 0 < result.shaded_sidewalk_pct <= 100 and 0 < result.shaded_street_pct <= 100
     assert 0 < result.shaded_corridor_pct <= 100
     ellipse = shadow_ellipse(Point(0, 0), 10.0, 18.0, result.sun_elevation_deg, result.sun_azimuth_deg)
@@ -310,3 +360,19 @@ def test_plan_sites_long_street_is_fast(pack, tilia):
     elapsed = time.perf_counter() - start
     assert summary.total == len(sites) == 2 * 162
     assert elapsed < 2.0
+
+
+@pytest.mark.parametrize("mode", ["grid", "pack"])
+def test_junction_exclusion_survives_all_editable_rules_disabled(ctx, pack, tilia, mode):
+    relaxed = apply_overrides(pack, {r.id: RuleOverride(enabled=False) for r in pack.rules})
+    sites, summary = plan_sites(ctx, PlanParams(spacing_m=6, mode=mode), relaxed, tilia)
+    assert summary.planted > 0
+    accepted = [s for s in sites if s.verdict != "invalid"]
+    assert all(_junction_distance(ctx, s.station_m) >= 10 for s in accepted)
+    if mode == "grid":
+        wide_crossing = next(s for s in sites if s.site_id == "R0321")
+        assert wide_crossing.pt.distance(ctx.junctions[1]) > 10
+        assert wide_crossing.verdict == "invalid"
+        assert "junction_exclusion" in wide_crossing.props.failed_rules
+    excluded = [s for s in sites if "junction_exclusion" in s.props.failed_rules]
+    assert all(row.new_crown_area_m2 == 0 for row in canopy_metrics(ctx, excluded, tilia).years)

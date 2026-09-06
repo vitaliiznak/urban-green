@@ -382,3 +382,14 @@ async def test_network_osm_marktgasse_winterthur():
     assert resp.stats.carriageway_m2 == 0.0          # pedestrian street: no carriageway
     assert resp.stats.plantable_m2 > 500 and resp.stats.buildings > 5
     assert 8.72 < ctx.city.center[0] < 8.74 and 47.49 < ctx.city.center[1] < 47.51
+
+
+def test_mapped_foot_crossing_is_a_junction_but_overpass_is_not():
+    axis = LineString([(0, 0), (100, 0)])
+    road = ({"id": 1, "tags": {"highway": "residential"}}, axis)
+    crossing = ({"id": 2, "tags": {"highway": "footway", "footway": "crossing"}},
+                LineString([(30, -10), (30, 10)]))
+    bridge = ({"id": 3, "tags": {"highway": "primary", "layer": "1", "bridge": "yes"}},
+              LineString([(70, -10), (70, 10)]))
+    found = osm.find_junctions(axis, [road, crossing, bridge], {1}, EVERYWHERE)
+    assert len(found) == 1 and found[0].equals(Point(30, 0))

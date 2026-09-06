@@ -131,37 +131,41 @@ def scenario_observation(r: ScenarioResponse) -> str:
     top = sorted(s.failures_by_rule.items(), key=lambda kv: -kv[1])[:3]
     failing = []
     for rid, n in top:
+        amber = sum(1 for feature in r.sites.features
+                    if feature["properties"]["verdict"] == "conditional"
+                    and any(check["rule_id"] == rid and check["passed"] is False
+                            for check in feature["properties"]["rules"]))
+        excluded = sum(1 for feature in r.sites.features
+                       if feature["properties"]["verdict"] == "invalid"
+                       and any(check["rule_id"] == rid and check["passed"] is False
+                               for check in feature["properties"]["rules"]))
+        counts = f"{n} failures: {amber} amber, {excluded} excluded"
         rule = rules.get(rid)
         if rule is None:
-            failing.append(f"{rid} ×{n}")
+            failing.append(f"{rid}: {counts}")
             continue
         req = f"{rule.min_distance_m:g} m" if rule.min_distance_m is not None else "boolean"
         src = rule.source_ref or ("planning default" if rule.assumption else "no source")
-        failing.append(f"{rid} ({rule.mode}, {req}, {src}) ×{n}")
+        failing.append(f"{rid} ({rule.mode}, {req}, {src}): {counts}")
+    amber_example = next((f["properties"]["site_id"] for f in r.sites.features if f["properties"]["verdict"] == "conditional"), "none")
+    excluded_example = next((f["properties"]["site_id"] for f in r.sites.features if f["properties"]["verdict"] == "invalid"), "none")
     text = (f"Scenario {r.scenario_id} \"{r.label}\": {s.valid} valid, {s.conditional} conditional, {s.invalid} invalid "
-            f"of {s.total} sites → {s.planted} planted ({p.spacing_m:g} m, {p.side}, {p.mode}, {service.species_short(r.species)}). "
+            f"of {s.total} sites → {s.planted} proposed ({p.spacing_m:g} m, {p.side}, {p.mode}, {service.species_short(r.species)}). "
+            f"Example site ids: amber {amber_example}; excluded {excluded_example}. "
             f"Canopy at 30 y: {year30.cover_corridor_pct:g} % of corridor, {year30.cover_street_pct:g} % of street, "
             f"{year30.sidewalk_under_crown_pct:g} % of sidewalk (existing cover {r.canopy.existing_cover_corridor_pct:g} %). ")
     text += "Top failing rules: " + ("; ".join(failing) if failing else "none") + "."
     if s.gaps:
         gap = s.gaps[0]
         text += f" {len(s.gaps)} gap(s), e.g. {gap.side} {gap.station_from_m:.0f}–{gap.station_to_m:.0f} m ({gap.reason})."
-    text += " Site ids = side letter + station in m; " + "; ".join(
-        f"{verdict}: {_example_ids(r, verdict)}" for verdict in ("conditional", "invalid")) + "."
     return text
-
-
-def _example_ids(r: ScenarioResponse, verdict: str, limit: int = 4) -> str:
-    ids = [f["properties"]["site_id"] for f in r.sites.features if f.get("properties", {}).get("verdict") == verdict]
-    if not ids:
-        return "none"
-    more = f" (+{len(ids) - limit} more)" if len(ids) > limit else ""
-    return ", ".join(ids[:limit]) + more
 
 
 def site_observation(p: SiteProps, scenario_id: str) -> str:
     parts = []
-    for rr in p.rules:
+    # Keep failed checks first so observation length limits preserve the reason
+    # this position was flagged, including the occupied-trunk safeguard.
+    for rr in sorted(p.rules, key=lambda rule: rule.passed is not False):
         mark = "?" if rr.passed is None else ("✓" if rr.passed else "✗")
         measured = "n/a" if rr.measured_m is None else f"{rr.measured_m:.2f} m"
         required = "boolean" if rr.required_m is None else f"≥ {rr.required_m:g} m"
@@ -170,7 +174,8 @@ def site_observation(p: SiteProps, scenario_id: str) -> str:
         parts.append(f"{mark} {rr.rule_id} ({rr.mode}): {measured} vs {required}, {rr.basis}{tag}{note}")
     edge = "n/a" if p.edge_distance_m is None else f"{p.edge_distance_m:.2f} m"
     return (f"Site {p.site_id} in {scenario_id}: station {station(p.station_m)}, {p.side} side, verdict {p.verdict}, "
-            f"trunk {edge} from the carriageway edge, mature crown {p.crown_d_mature_m:g} m. Rules: " + "; ".join(parts))
+            f"axis-to-road-edge distance {edge} (not trunk clearance), mature crown {p.crown_d_mature_m:g} m. "
+            "Trunk clearance is measured by the carriageway_edge rule. Rules: " + "; ".join(parts))
 
 
 def station(m: float) -> str:
@@ -207,10 +212,11 @@ def shade_observation(s: ShadeResult) -> str:
 
 
 def compare_observation(c: CompareResponse) -> str:
-    rows = "; ".join(f"{r.scenario_id} \"{r.label}\": {r.planted} planted ({r.valid} valid/{r.conditional} cond./{r.invalid} inv.), "
+    rows = "; ".join(f"{r.scenario_id} \"{r.label}\" on {r.street_name} ({r.city}): {r.planted} proposed ({r.valid} valid/{r.conditional} cond./{r.invalid} inv.), "
                      f"{r.cover_corridor_pct_30:g} % corridor, {r.cover_street_pct_30:g} % street, "
                      f"{r.sidewalk_under_crown_pct_30:g} % sidewalk at 30 y" for r in c.rows)
-    return f"Compared {len(c.rows)} scenarios: {rows}. Best corridor cover: {c.best_by_cover}."
+    ranking = f"Best corridor cover: {c.best_by_cover}." if c.best_by_cover else "Different street contexts: no best-plan ranking."
+    return f"Compared {len(c.rows)} scenarios: {rows}. {ranking}"
 
 
 # -------------------------------------------------------------------- helpers
@@ -261,15 +267,17 @@ async def load_street(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
 
 
 @tool("plan_trees", "Propose tree positions on the loaded street and evaluate every one against the rule pack. "
-      "Grid mode places one candidate per spacing step; pack mode packs as many legal trees as possible.",
+      "Grid mode places one candidate per spacing step; pack mode fits positions under the evaluated required rules.",
       {"properties": {"spacing_m": {"type": "number", "minimum": 3, "maximum": 40,
                                     "description": "trunk spacing in metres (default 8)"},
                       "side": {"type": "string", "enum": ["both", "left", "right"], "description": "default both"},
+                      "crown_diameter_m": {"type": "number", "minimum": 2, "maximum": 25,
+                                           "description": "Optional mature crown diameter for this scenario in metres. Custom planning assumption; omit to use the species size."},
                       "species_id": {"type": "string", "description": "species id from list_species; "
                                                                       "default tilia_cordata when the planner names none"},
                       "mode": {"type": "string", "enum": ["grid", "pack"],
                                "description": "grid = one candidate per step, every verdict shown (default); "
-                                              "pack = as many legal trees as fit"},
+                                              "pack = as many trees as fit the evaluated required rules"},
                       "offset_from_edge_m": {"type": "number", "minimum": 0.3, "maximum": 5.0,
                                              "description": "carriageway edge to trunk centre, default 1.0"},
                       "label": {"type": "string", "maxLength": 60}},
@@ -283,7 +291,16 @@ async def plan_trees(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
                       ui=[{"action": "select_scenario", "scenario_id": resp.scenario_id}, {"action": "set_year", "year": 30}])
 
 
-@tool("explain_site", "Explain one proposed site: every rule with measured vs required distance and its source.",
+@tool("inspect_plan", "Read the current plan's counts, canopy and failing rules without creating or changing a plan. "
+      "Use first when asked why positions are amber, red, or how the existing plan performs.",
+      {"properties": {"scenario_id": {"type": "string", "description": "defaults to the current scenario"}},
+       "required": []})
+async def inspect_plan(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
+    resp = service.scenario(_scenario_id(ctx, args))
+    return ToolResult(summary=scenario_observation(resp))
+
+
+@tool("explain_site", "Explain one proposed site: every rule with measured distance, required or recommended threshold, and source.",
       {"properties": {"site_id": {"type": "string", "description": "e.g. 'L0120' or 'R0240'"},
                       "scenario_id": {"type": "string", "description": "defaults to the latest scenario"}},
        "required": ["site_id"]})
@@ -291,7 +308,8 @@ async def explain_site(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     sid = _scenario_id(ctx, args)
     props = service.explain_site(sid, args["site_id"])
     return ToolResult(summary=site_observation(props, sid), payload_type="site", payload=props.model_dump(),
-                      ui=[{"action": "fly_to", "target": props.site_id}])
+                      ui=[{"action": "select_scenario", "scenario_id": sid},
+                          {"action": "fly_to", "target": props.site_id}])
 
 
 @tool("set_rule", "Override a rule for this session (distance, must/should, enabled). Takes effect on the next plan_trees.",
@@ -347,10 +365,12 @@ async def shade(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:
     fields = {k: v for k, v in args.items() if k in ("year", "month", "day", "hour") and v is not None}
     result = await asyncio.to_thread(service.shade, ShadeRequest(scenario_id=sid, **fields))
     return ToolResult(summary=shade_observation(result), payload_type="shade", payload=result.model_dump(),
-                      ui=[{"action": "set_year", "year": result.year}, {"action": "show_layer", "layer": "shade", "visible": True}])
+                      ui=[{"action": "select_scenario", "scenario_id": sid},
+                          {"action": "set_year", "year": result.year},
+                          {"action": "show_layer", "layer": "shade", "visible": True}])
 
 
-@tool("compare_scenarios", "Compare scenarios side by side: planted counts and canopy shares at 30 years. "
+@tool("compare_scenarios", "Compare scenarios side by side: proposed counts and canopy shares at 30 years. "
       "Defaults to every scenario of this session (max 6).",
       {"properties": {"scenario_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 6}}, "required": []})
 async def compare_scenarios(ctx: ToolContext, args: dict[str, Any]) -> ToolResult:

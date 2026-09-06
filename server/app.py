@@ -44,6 +44,8 @@ from .schemas import (  # noqa: E402
     SiteProps,
     StreetRequest,
     StreetResponse,
+    TemperatureRequest,
+    TemperatureResult,
 )
 from .session import SESSION_HEADER, Session, current_session, session_middleware  # noqa: E402
 
@@ -148,6 +150,11 @@ def shade(req: ShadeRequest) -> ShadeResult:
 @app.post("/api/compare", response_model=CompareResponse)
 def compare(req: CompareRequest) -> CompareResponse:
     return service.compare(req)
+
+
+@app.post("/api/temperature", response_model=TemperatureResult)
+def temperature(req: TemperatureRequest) -> TemperatureResult:
+    return service.temperature(req)
 
 
 @app.get("/api/scenarios/{scenario_id}", response_model=ScenarioResponse)

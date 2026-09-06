@@ -20,7 +20,7 @@ from .base import CityAdapter, ExistingTree, StreetContext, UpstreamUnavailable
 from .osm import (CLIP_MARGIN_M, CORRIDOR_HALF_WIDTH_M, OSM_ATTRIBUTION, SIDEWALK_WIDTH_M, BBox,
                   OsmLayers, assemble_context, build_osm_layers, drawn_axis, fetch_area,
                   fetch_json, genus_from_species, impute_crown_d, parse_length, parse_year,
-                  resolve_street_axis, union_polygons)
+                  resolve_street_axis, resolve_street_point, union_polygons)
 
 EPSG = 2056
 ZURICH_BBOX: BBox = (8.44, 47.32, 8.63, 47.43)
@@ -190,6 +190,10 @@ class ZurichAdapter(CityAdapter):
     """Zürich: measured cadastre geometry, city trees with OSM fallback."""
 
     info = ZURICH_INFO
+
+    async def street_from_point(self, point: tuple[float, float]) -> StreetContext:
+        resolved = await resolve_street_point(point, epsg=EPSG, city_bbox=ZURICH_BBOX)
+        return await self._build(resolved.axis, resolved.name, resolved.way_ids, resolved.warnings)
 
     async def find_street(self, query: str) -> StreetContext:
         """Resolve a Zürich street name and build its context."""

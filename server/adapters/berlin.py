@@ -14,7 +14,7 @@ from ..schemas import Basemap, CityInfo
 from .base import CityAdapter, ExistingTree, StreetContext
 from .osm import (CLIP_MARGIN_M, OSM_ATTRIBUTION, BBox, drawn_axis, fetch_json, genus_from_species,
                   impute_crown_d, osm_street_context, parse_int, parse_length, parse_year,
-                  resolve_street_axis)
+                  resolve_street_axis, resolve_street_point)
 
 EPSG = 25833
 BERLIN_BBOX: BBox = (13.08, 52.33, 13.77, 52.68)
@@ -98,6 +98,10 @@ class BerlinAdapter(CityAdapter):
     """Berlin: OSM street geometry, cadastre trees (street + park layers)."""
 
     info = BERLIN_INFO
+
+    async def street_from_point(self, point: tuple[float, float]) -> StreetContext:
+        resolved = await resolve_street_point(point, epsg=EPSG, city_bbox=BERLIN_BBOX)
+        return await self._build(resolved.axis, resolved.name, resolved.way_ids, resolved.warnings)
 
     async def find_street(self, query: str) -> StreetContext:
         """Resolve a Berlin street name and build its context."""

@@ -115,7 +115,7 @@ def test_street_demo(client: TestClient) -> None:
 def test_plan_canopy_shade_site(client: TestClient) -> None:
     sc = plan_demo(client)
     assert len(sc["scenario_id"]) == 8
-    assert sc["label"] == "8 m · Tilia cordata · both · grid"
+    assert sc["label"] == "8 m · Tilia cordata · 10 m crown · both · grid"
     assert sc["created_at"].endswith("Z")
     summary = sc["summary"]
     assert summary["total"] == len(sc["sites"]["features"]) > 10
@@ -150,6 +150,10 @@ def test_compare_and_export(client: TestClient) -> None:
     cmp = client.post("/api/compare", json={"scenario_ids": [a["scenario_id"], b["scenario_id"]]}).json()
     assert [r["scenario_id"] for r in cmp["rows"]] == [a["scenario_id"], b["scenario_id"]]
     assert cmp["rows"][1]["label"] == "wide"
+    assert all(row["street_id"] == a["street_id"] for row in cmp["rows"])
+    assert cmp["rows"][0]["street_name"] == "Demo street"
+    assert cmp["rows"][0]["city"] == "demo"
+    assert "synthetic" in cmp["rows"][0]["tree_source"].lower()
     assert cmp["best_by_cover"] in (a["scenario_id"], b["scenario_id"])
 
     r = client.get(f"/api/export/{a['scenario_id']}.geojson")
@@ -162,6 +166,37 @@ def test_compare_and_export(client: TestClient) -> None:
     assert fc["properties"]["rule_pack_id"] == "berlin_strassenbaeume_2024"
     assert fc["properties"]["street"] and fc["properties"]["generated_at"]
     assert client.get("/api/export/nope.geojson").status_code == 404
+
+
+def test_site_observation_distinguishes_axis_distance_from_trunk_clearance(client: TestClient) -> None:
+    from server.agent.tools import site_observation
+
+    scenario = plan_demo(client)
+    site = service.explain_site(scenario["scenario_id"], "L0100")
+    observation = site_observation(site, scenario["scenario_id"])
+    assert site.edge_distance_m == 3.5
+    clearance = next(rule for rule in site.rules if rule.rule_id == "carriageway_edge")
+    assert clearance.measured_m == 1.0
+    assert "axis-to-road-edge distance 3.50 m (not trunk clearance)" in observation
+    assert "carriageway_edge (must): 1.00 m" in observation
+    assert "trunk 3.50 m from the carriageway edge" not in observation
+    assert observation.index("occupied_tree_position") < observation.index("carriageway_edge (must)")
+
+
+def test_compare_different_streets_keeps_identity_without_ranking(client: TestClient) -> None:
+    a = plan_demo(client, label="Same settings")
+    street = client.post("/api/street", json={"city": "demo", "query": "Another street"}).json()
+    response = client.post("/api/plan", json={"street_id": street["street_id"], "label": "Same settings"})
+    assert response.status_code == 200, response.text
+    b = response.json()
+
+    response = client.post("/api/compare", json={"scenario_ids": [a["scenario_id"], b["scenario_id"]]})
+    assert response.status_code == 200, response.text
+    comparison = response.json()
+    assert [row["street_id"] for row in comparison["rows"]] == [a["street_id"], street["street_id"]]
+    assert [row["street_name"] for row in comparison["rows"]] == ["Demo street", "Another street"]
+    assert all(row["city_name"] == street["city_name"] for row in comparison["rows"])
+    assert comparison["best_by_cover"] is None
 
 
 # ------------------------------------------------------------------ rules
@@ -219,7 +254,7 @@ class FakeProvider:
         await on_event("tool_call", {"id": "c3", "name": "fly_to", "args": {"target": "street", "zoom": 17}})
         await on_event("text", {"delta": "done."})
         await on_event("usage", {"input_tokens": 12, "output_tokens": 3})
-        assert len(obs1) < 800 and len(obs2) < 800 and "planted" in obs2
+        assert len(obs1) <= 800 and len(obs2) <= 800 and "proposed" in obs2
         return [{"role": "assistant", "content": "Loading done."}]
 
 
@@ -257,11 +292,95 @@ class FailingProvider(FakeProvider):
         raise providers.ProviderError("model unavailable")
 
 
+def test_agent_explanation_reads_current_plan_without_replanning(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    current = plan_demo(client)
+    session = SESSIONS.get_or_create(SID)
+    scenario_ids = list(session.scenario_ids)
+    stored_ids = set(service.STORE.scenarios)
+    selected_id = session.last_scenario_id
+
+    class ExplanationProvider(FakeProvider):
+        async def run_turn(self, system, history, tools, on_event):
+            assert "call inspect_plan first" in system
+            assert "not legal compliance or planting approval" in system
+            observation = await on_event("tool_call", {"id": "explain", "name": "inspect_plan", "args": {}})
+            assert current["scenario_id"] in observation
+            assert f'{current["summary"]["planted"]} proposed' in observation
+            rule_id, total = max(current["summary"]["failures_by_rule"].items(), key=lambda item: item[1])
+            counts = {"conditional": 0, "invalid": 0}
+            for site in current["sites"]["features"]:
+                props = site["properties"]
+                if props["verdict"] in counts and any(
+                    check["rule_id"] == rule_id and check["passed"] is False for check in props["rules"]
+                ):
+                    counts[props["verdict"]] += 1
+            assert f'{total} failures: {counts["conditional"]} amber, {counts["invalid"]} excluded' in observation
+            await on_event("text", {"delta": "Amber positions do not meet a recommendation."})
+            return [{"role": "assistant", "content": "Amber positions do not meet a recommendation."}]
+
+    monkeypatch.setattr(providers, "get_provider", lambda: ExplanationProvider())
+    response = client.post("/api/agent", json={
+        "message": "Why are these positions amber?", "street_id": current["street_id"], "scenario_id": current["scenario_id"],
+    })
+    assert response.status_code == 200
+    events = parse_sse(response.text)
+    assert not any(name in {"ui", "error"} for name, _ in events)
+    result = next(data for name, data in events if name == "result")
+    assert result["name"] == "inspect_plan" and result["ok"] is True
+    assert result["payload"] is None and result["payload_type"] is None
+    assert set(service.STORE.scenarios) == stored_ids
+    assert session.scenario_ids == scenario_ids
+    assert session.last_scenario_id == selected_id
+    assert client.get(f'/api/scenarios/{selected_id}').json() == current
+
+
 def test_agent_error_event(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(providers, "get_provider", lambda: FailingProvider())
     with client.stream("POST", "/api/agent", json={"message": "hi"}) as r:
         events = parse_sse("".join(r.iter_text()))
     assert events == [("error", {"message": "model unavailable"})]
+
+
+@pytest.mark.parametrize("tool_name", ["shade", "explain_site"])
+def test_agent_analysis_selects_requested_plan_before_display(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tool_name: str,
+) -> None:
+    older = plan_demo(client, spacing_m=8)
+    current = plan_demo(client, spacing_m=12)
+    site_id = older["sites"]["features"][0]["properties"]["site_id"]
+    args = {"scenario_id": older["scenario_id"]}
+    args.update({"year": 10, "month": 6, "day": 21, "hour": 12} if tool_name == "shade" else {"site_id": site_id})
+
+    class AnalysisProvider(FakeProvider):
+        async def run_turn(self, system, history, tools, on_event):
+            assert "A should threshold is recommended" in system
+            await on_event("tool_call", {"id": "analysis", "name": tool_name, "args": args})
+            return [{"role": "assistant", "content": "Here is the requested earlier plan."}]
+
+    monkeypatch.setattr(providers, "get_provider", lambda: AnalysisProvider())
+    response = client.post("/api/agent", json={
+        "message": "Show the earlier plan analysis", "street_id": current["street_id"], "scenario_id": current["scenario_id"],
+    })
+    assert response.status_code == 200
+    events = parse_sse(response.text)
+    assert not any(name == "error" for name, _ in events)
+    expected_ui = [{"action": "select_scenario", "scenario_id": older["scenario_id"]}]
+    if tool_name == "shade":
+        expected_ui.extend([{"action": "set_year", "year": 10}, {"action": "show_layer", "layer": "shade", "visible": True}])
+    else:
+        expected_ui.append({"action": "fly_to", "target": site_id})
+    assert [data for name, data in events if name == "ui"] == expected_ui
+    result_index = next(i for i, (name, _) in enumerate(events) if name == "result")
+    assert all(i < result_index for i, (name, _) in enumerate(events) if name == "ui")
+    result = events[result_index][1]
+    assert result["ok"] is True
+    if tool_name == "shade":
+        assert result["payload"]["scenario_id"] == older["scenario_id"]
+        assert result["payload"]["year"] == 10
+        assert "06-21 12:00" in result["payload"]["when"]
+    else:
+        assert result["payload"] == older["sites"]["features"][0]["properties"]
+    assert len(service.STORE.scenarios) == 2
 
 
 # ------------------------------------------------------------------ rate limits
@@ -309,3 +428,74 @@ def test_agent_heartbeat_while_waiting(client: TestClient, monkeypatch: pytest.M
         raw = "".join(r.iter_text())
     assert raw.count(": ping\n\n") >= 2
     assert [e for e, _ in parse_sse(raw)] == ["text", "done"]
+
+
+def test_map_click_loads_city_context(client, monkeypatch):
+    from server.adapters import ADAPTERS
+    from server.engine.synthetic import synthetic_street
+    seen = []
+    async def from_point(point):
+        seen.append(point)
+        ctx = synthetic_street()
+        ctx.city = ADAPTERS['zurich'].info
+        ctx.name = 'Clicked street'
+        return ctx
+    monkeypatch.setattr(ADAPTERS['zurich'], 'street_from_point', from_point)
+    response = client.post('/api/street', json={'city': 'zurich', 'point': [8.53, 47.38]})
+    assert response.status_code == 200, response.text
+    assert response.json()['name'] == 'Clicked street'
+    assert seen == [(8.53, 47.38)]
+    assert response.json()['layers']['axis']['features']
+
+
+def test_map_click_demo_rejected_and_coordinate_validation(client):
+    assert client.post('/api/street', json={'city': 'demo', 'point': [8.53, 47.38]}).status_code == 404
+    assert client.post('/api/street', json={'city': 'zurich', 'point': [8.53]}).status_code == 422
+
+
+def test_custom_crown_size_updates_geometry_checks_and_comparisons(client):
+    street = load_demo(client)
+    base = {'street_id': street['street_id'], 'species_id': 'tilia_cordata'}
+    large = client.post('/api/plan', json=base).json()
+    response = client.post('/api/plan', json={**base, 'crown_diameter_m': 4})
+    assert response.status_code == 200, response.text
+    small = response.json()
+    assert small['params']['crown_diameter_m'] == 4
+    assert small['species']['mature_crown_d_m'] == 4
+    assert large['species']['mature_crown_d_m'] == 10
+    assert service.species('tilia_cordata').mature_crown_d_m == 10
+    by_large = {f['properties']['site_id']: f['properties'] for f in large['sites']['features']}
+    for feature in small['sites']['features']:
+        props = feature['properties']
+        previous = by_large[props['site_id']]
+        assert props['crown_d_mature_m'] == 4
+        assert 1.5 < props['crown_d_by_year']['30'] < 4
+        assert props['crown_d_by_year']['0'] == previous['crown_d_by_year']['0'] == 1.5
+        checks = {r['rule_id']: r for r in props['rules']}
+        old_checks = {r['rule_id']: r for r in previous['rules']}
+        assert checks['building_crown']['measured_m'] == pytest.approx(old_checks['building_crown']['measured_m'] + 3)
+        assert checks['junction_exclusion'] == old_checks['junction_exclusion']
+    assert small['canopy']['years'][-1]['new_crown_area_m2'] < large['canopy']['years'][-1]['new_crown_area_m2']
+    def temp(sc):
+        result = client.post('/api/temperature', json={'scenario_id': sc['scenario_id']})
+        assert result.status_code == 200, result.text
+        return result.json()
+    assert temp(small)['cooling_c'] < temp(large)['cooling_c']
+    def shade(sc):
+        result = client.post('/api/shade', json={'scenario_id': sc['scenario_id']})
+        assert result.status_code == 200, result.text
+        return result.json()
+    assert shade(small)['shaded_corridor_pct'] < shade(large)['shaded_corridor_pct']
+    comparison = client.post('/api/compare', json={'scenario_ids': [large['scenario_id'], small['scenario_id']]}).json()
+    assert [r['crown_diameter_m'] for r in comparison['rows']] == [10, 4]
+    exported = client.get(f"/api/export/{small['scenario_id']}.geojson").json()
+    crowns = [f for f in exported['features'] if f['properties'].get('kind') == 'mature_crown']
+    assert crowns and all(f['properties']['crown_d_m'] == 4 for f in crowns)
+    assert service.scenario(large['scenario_id']).species.mature_crown_d_m == 10
+
+
+@pytest.mark.parametrize('diameter', [1.5, 25.5, 'NaN', 'Infinity'])
+def test_crown_size_validation(client, diameter):
+    street = load_demo(client)
+    response = client.post('/api/plan', json={'street_id': street['street_id'], 'crown_diameter_m': diameter})
+    assert response.status_code == 422

@@ -103,7 +103,7 @@ class _Planner:
         reach = edge + self.params.offset_from_edge_m
         trunk = Point(origin.x + normal[0] * reach, origin.y + normal[1] * reach)
         verdict, rules, _ = evaluate_site(trunk, self.ctx, self.pack, self.sp, self.params,
-                                          normal=normal, prepared=self.prep)
+                                          normal=normal, station_m=station, prepared=self.prep)
         if edge_note and rules:
             self._annotate_edge(rules, edge_note)
         site_id = f"{'L' if side == 'left' else 'R'}{int(round(station)):04d}"

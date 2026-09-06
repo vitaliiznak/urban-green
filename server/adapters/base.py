@@ -55,6 +55,9 @@ class CityAdapter(ABC):
     """Implementations: server/adapters/zurich.py, berlin.py, osm.py (generic)."""
     info: CityInfo
 
+    async def street_from_point(self, point: tuple[float, float]) -> StreetContext:
+        raise StreetNotFound("Map selection needs a real city. Choose Zürich, Berlin or Anywhere (OSM).")
+
     @abstractmethod
     async def find_street(self, query: str) -> StreetContext:
         """Resolve a street by name inside this city and build its context."""
