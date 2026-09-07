@@ -14,7 +14,7 @@ Verdict = Literal["valid", "conditional", "invalid"]
 RuleMode = Literal["must", "should"]
 Basis = Literal["measured", "estimated", "unknown"]
 LayerKey = Literal["axis", "carriageway", "sidewalks", "plantable", "buildings", "cycleways",
-                   "junctions", "existing_trees", "corridor"]
+                   "parking", "junctions", "existing_trees", "corridor"]
 
 YEARS = (0, 5, 10, 20, 30)
 

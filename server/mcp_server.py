@@ -32,7 +32,7 @@ async def _call(name: str, **args: Any) -> str:
 
 @mcp.tool()
 async def load_street(city: str, query: str) -> str:
-    """Load a street (city id: zurich, berlin, osm with 'street, city', or demo) and report its geometry and trees."""
+    """Load a Zürich street (city id: zurich) and report its geometry and trees."""
     return await _call("load_street", city=city, query=query)
 
 

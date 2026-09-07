@@ -1,4 +1,10 @@
 .venv
+node_modules
+.wrangler
+package.json
+package-lock.json
+worker.ts
+wrangler.jsonc
 .env
 .env.*
 .git

@@ -2,8 +2,9 @@
 
 Rules are data (``rules/*.json``) with attribution; this module only measures
 distances in the street's metric CRS and compares them with the rule values.
-An independent geometry safeguard excludes positions already occupied by a
-mapped trunk, without treating numerical coincidence as a clearance standard.
+Independent geometry safeguards exclude positions already occupied by a
+mapped trunk or a parking bay, without treating numerical coincidence as a
+clearance standard.
 ``PreparedContext`` wraps a ``StreetContext`` with spatial indexes so that a
 few thousand cadastre polygons can be queried per site in microseconds.
 """
@@ -16,9 +17,10 @@ from typing import Callable, Optional
 
 import numpy as np
 import shapely
-from shapely import STRtree
+from shapely import STRtree, make_valid
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.base import BaseGeometry
+from shapely.ops import unary_union
 
 from ..adapters.base import StreetContext
 from ..schemas import Basis, PlanParams, Rule, RuleOverride, RulePack, RuleResult, Species, Verdict
@@ -28,6 +30,8 @@ SIDEWALK_PROBE_HALF_M = 12.0
 PLANTABLE_TOLERANCE_M = 0.05
 ON_SEGMENT_TOLERANCE_M = 0.05
 MEASURE_EPS = 1e-6
+ON_STREET_PARKING_GAP_M = 1.5
+STREET_PARKING_MAX_DEPTH_M = 6.0
 
 # --------------------------------------------------------------------------- loading
 @lru_cache(maxsize=1)
@@ -152,15 +156,40 @@ class PointIndex:
         return float(dist[0])
 
 
+def edge_surface(ctx: StreetContext) -> BaseGeometry:
+    """Carriageway plus street-side parking, used to place trunks beyond parking bays.
+
+    Only parking that touches the carriageway (within 1.5 m) is included, and only
+    the first 6 m of depth, so a car park behind the sidewalk does not pull the
+    planting line across the lot.
+    """
+    carriageway = ctx.carriageway
+    parking = ctx.parking
+    if carriageway is None or carriageway.is_empty or parking is None or parking.is_empty:
+        return carriageway
+    curb = carriageway.buffer(ON_STREET_PARKING_GAP_M)
+    parts = [p for p in flatten(parking) if not p.intersection(curb).is_empty]
+    if not parts:
+        return carriageway
+    street = unary_union(parts).intersection(carriageway.buffer(STREET_PARKING_MAX_DEPTH_M))
+    if street.is_empty:
+        return carriageway
+    merged = unary_union([carriageway, street])
+    closed = merged.buffer(ON_STREET_PARKING_GAP_M / 2.0).buffer(-ON_STREET_PARKING_GAP_M / 2.0)
+    return make_valid(closed)
+
+
 class PreparedContext:
     """Spatial indexes of a StreetContext, built once per plan and reused per site."""
 
     def __init__(self, ctx: StreetContext):
         self.ctx = ctx
         self.carriageway = LayerIndex(ctx.carriageway)
+        self.edge = LayerIndex(edge_surface(ctx))
         self.buildings = LayerIndex(ctx.buildings)
         self.cycleways = LayerIndex(ctx.cycleways)
         self.sidewalks = LayerIndex(ctx.sidewalks)
+        self.parking = LayerIndex(ctx.parking)
         self.trees = PointIndex([t.pt for t in ctx.existing_trees])
         self.junctions = PointIndex(list(ctx.junctions))
         self.junction_stations = [ctx.axis.project(p) for p in ctx.junctions]
@@ -309,6 +338,25 @@ def verdict_for(results: list[RuleResult]) -> Verdict:
     return "valid"
 
 
+def _parking_exclusion(pt: Point, prep: PreparedContext) -> RuleResult:
+    """Reject trunks that stand on a mapped parking bay."""
+    distance = prep.parking.distance(pt)
+    on_bay = distance is not None and distance <= PLANTABLE_TOLERANCE_M
+    return RuleResult(
+        rule_id="parking_exclusion",
+        label="Position is a parking bay",
+        mode="must",
+        required_m=None,
+        measured_m=None if distance is None else round(distance, 2),
+        passed=not on_bay,
+        basis=prep.basis("parking"),
+        assumption=True,
+        note=("This position sits on a mapped parking bay and is excluded. "
+              "Geometry safeguard from mapped parking and paved surfaces, not a cited planting standard."
+              if on_bay else None),
+    )
+
+
 def _occupied_tree_position(pt: Point, prep: PreparedContext) -> RuleResult:
     """Reject duplicate mapped trunk positions independently of editable clearances.
 
@@ -342,13 +390,14 @@ def evaluate_site(pt: Point, ctx: StreetContext, pack: RulePack, sp: Species, pa
     sidewalk width probe); when omitted it is derived from the axis. Pass a
     ``PreparedContext`` built from ``ctx`` when evaluating many sites.
     Returns the verdict, one RuleResult per enabled rule plus the occupied-trunk
-    geometry safeguard, and the collected notes.
+    and parking geometry safeguards, and the collected notes.
     """
     prep = prepared if prepared is not None and prepared.ctx is ctx else PreparedContext(ctx)
     if normal is None:
         _, normal = axis_frame(ctx.axis, ctx.axis.project(pt))
     results = [_evaluate_rule(rule, pt, prep, sp, params, normal) for rule in pack.rules if rule.enabled]
     results.append(_occupied_tree_position(pt, prep))
+    results.append(_parking_exclusion(pt, prep))
     # A side-street can send the carriageway ray far sideways. Measure the
     # station as well as trunk distance so this cannot escape the exclusion.
     station = ctx.axis.project(pt) if station_m is None else station_m

@@ -45,7 +45,7 @@ PIXELKARTE_GRAU_URL = ("https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-
                        "3857/{z}/{x}/{y}.jpeg")
 
 LAYER_KEYS = ("axis", "carriageway", "sidewalks", "plantable", "buildings", "cycleways",
-              "junctions", "existing_trees", "corridor")
+              "parking", "junctions", "existing_trees", "corridor")
 
 
 def demo_city_info() -> CityInfo:
@@ -137,6 +137,7 @@ def synthetic_street(length_m: float = 400, road_w: float = 7.0, sidewalk_w: flo
     sidewalks = sidewalks.intersection(fetch_area)
     buildings = buildings.intersection(fetch_area)
     plantable = sidewalks.difference(buildings).difference(carriageway)
+    parking = shapely.Polygon()
 
     junction_stations = [0.0, length_m] + ([SIDE_STREET_STATION_M] if SIDE_STREET_STATION_M < length_m else [])
     junctions = [Point(x0 + s, y0) for s in junction_stations]
@@ -161,6 +162,7 @@ def synthetic_street(length_m: float = 400, road_w: float = 7.0, sidewalk_w: flo
         plantable=plantable,
         buildings=buildings,
         cycleways=cycleways,
+        parking=parking,
         junctions=junctions,
         existing_trees=existing_trees,
         corridor=corridor,

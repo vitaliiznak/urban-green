@@ -34,8 +34,8 @@ from ..schemas import (
 from ..session import Session
 
 OBSERVATION_LIMIT = 800
-LAYERS = ["axis", "carriageway", "sidewalks", "plantable", "buildings", "cycleways", "junctions",
-          "existing_trees", "corridor", "sites", "crowns", "shade"]
+LAYERS = ["axis", "carriageway", "sidewalks", "plantable", "buildings", "cycleways", "parking",
+          "junctions", "existing_trees", "corridor", "sites", "crowns", "shade"]
 
 
 @dataclass
@@ -254,8 +254,8 @@ def _find_rule_pack(rule_id: str, ctx: ToolContext) -> RulePack:
 
 
 # -------------------------------------------------------------------- handlers
-@tool("load_street", "Load a street's geometry and existing trees for a city. Use city id 'zurich', 'berlin', "
-      "'osm' (query 'street, city') or 'demo' (offline). Must run before plan_trees.",
+@tool("load_street", "Load a street's geometry and existing trees in Zürich. Use city id 'zurich' "
+      "and a street name such as 'Langstrasse'. Must run before plan_trees.",
       {"properties": {"city": {"type": "string", "description": "city adapter id"},
                       "query": {"type": "string", "description": "street name, e.g. 'Langstrasse'"}},
        "required": ["city", "query"]})

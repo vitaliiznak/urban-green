@@ -1,4 +1,4 @@
-"""OpenStreetMap helpers shared by every adapter, plus the generic "osm" adapter.
+"""OpenStreetMap helpers shared by the Zürich adapter.
 
 Three responsibilities live here:
 
@@ -37,8 +37,8 @@ from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge, nearest_points, substring, unary_union
 
 from .. import crs
-from ..schemas import Basemap, Basis, CityInfo
-from .base import CityAdapter, ExistingTree, StreetContext, StreetNotFound, UpstreamUnavailable
+from ..schemas import Basis, CityInfo
+from .base import ExistingTree, StreetContext, StreetNotFound, UpstreamUnavailable
 
 USER_AGENT = "urban-green/0.1 (street-tree planning demo)"
 OVERPASS_URLS = ("https://maps.mail.ru/osm/tools/overpass/api/interpreter",   # fastest public mirror in probes (0.8 s)
@@ -92,6 +92,19 @@ MINOR_CLASSES = frozenset({
     "platform", "elevator", "proposed", "construction",
 })
 CYCLE_LANE_VALUES = frozenset({"lane", "track", "opposite_lane", "opposite_track"})
+PARKING_ABSENT = frozenset({"no", "none", "separate"})
+PARKING_ON_STREET = frozenset({
+    "yes", "lane", "street_side", "on_kerb", "half_on_kerb", "shoulder",
+    "parallel", "diagonal", "perpendicular", "marked",
+})
+PARKING_WIDTH_M: dict[str, float] = {
+    "parallel": 2.0, "lane": 2.0, "yes": 2.0, "marked": 2.2, "street_side": 2.2,
+    "on_kerb": 2.0, "half_on_kerb": 1.5, "shoulder": 2.0,
+    "diagonal": 4.8, "perpendicular": 5.0,
+}
+DEFAULT_PARKING_WIDTH_M = 2.0
+PARKING_SPACE_NODE_R_M = 2.0
+PARKING_LANE_WAY_HALF_M = 1.25
 
 BBox = tuple[float, float, float, float]  # minlon, minlat, maxlon, maxlat
 
@@ -332,9 +345,12 @@ def overpass_name_query(name: str, bbox: BBox) -> str:
 
 
 def overpass_area_query(bboxes: list[BBox]) -> str:
-    """Highways, buildings and trees inside the union of the given bboxes."""
+    """Highways, buildings, parking and trees inside the union of the given bboxes."""
     body = "".join(
         f'way["highway"]({_ql_bbox(b)});way["building"]({_ql_bbox(b)});'
+        f'way["amenity"~"^(parking|parking_space)$"]({_ql_bbox(b)});'
+        f'way["parking"="lane"]({_ql_bbox(b)});'
+        f'node["amenity"="parking_space"]({_ql_bbox(b)});'
         f'node["natural"="tree"]({_ql_bbox(b)});'
         f'node["highway"="crossing"]({_ql_bbox(b)});' for b in bboxes)
     return f"[out:json][timeout:25];({body});out tags geom;"
@@ -536,6 +552,45 @@ def cycle_lane_sides(tags: dict[str, Any]) -> tuple[bool, bool]:
     return left, right
 
 
+def _tag_value(tags: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        if key in tags and tags[key] is not None:
+            return str(tags[key]).strip().lower()
+    return None
+
+
+def parking_side_kind(tags: dict[str, Any], side: str) -> str | None:
+    """On-street parking type on ``side`` (left/right), or None when that side has none."""
+    specific = _tag_value(tags, f"parking:{side}")
+    both = _tag_value(tags, "parking:both")
+    val = specific if specific is not None else both
+    if val in PARKING_ABSENT:
+        return None
+    if val in PARKING_ON_STREET:
+        return val
+    old = _tag_value(tags, f"parking:lane:{side}", "parking:lane:both", "parking:lane")
+    if old in PARKING_ABSENT or old is None:
+        return None
+    if old in PARKING_ON_STREET:
+        return old
+    return None
+
+
+def parking_side_width(tags: dict[str, Any], side: str) -> float | None:
+    """Width of on-street parking on ``side`` in metres, or None when that side has none."""
+    kind = parking_side_kind(tags, side)
+    if kind is None:
+        return None
+    explicit = parse_length(_tag_value(tags, f"parking:{side}:width", "parking:both:width",
+                                       f"parking:lane:{side}:width"))
+    if explicit is not None and 0.8 <= explicit <= 8.0:
+        return explicit
+    orientation = _tag_value(tags, f"parking:{side}:orientation", "parking:both:orientation")
+    if kind in ("diagonal", "perpendicular", "parallel"):
+        orientation = kind
+    return PARKING_WIDTH_M.get(orientation or kind, DEFAULT_PARKING_WIDTH_M)
+
+
 def is_minor_way(tags: dict[str, Any]) -> bool:
     """Footways, paths, service roads etc. without a name are not real streets."""
     return str(tags.get("highway") or "") in MINOR_CLASSES and not tags.get("name")
@@ -649,6 +704,7 @@ class OsmLayers:
     plantable: BaseGeometry
     buildings: BaseGeometry
     cycleways: BaseGeometry
+    parking: BaseGeometry
     junctions: list[Point]
     trees: list[ExistingTree]
     axis_way_ids: list[int]
@@ -716,6 +772,50 @@ def _cycle_offsets(line: LineString, tags: dict[str, Any], width: float) -> list
     if right:
         lines.append(line.offset_curve(-offset))
     return [ln for ln in lines if not ln.is_empty]
+
+
+def _parking_band(line: LineString, tags: dict[str, Any], width: float) -> BaseGeometry:
+    """On-street parking strips beside one way, from ``parking:*`` / ``parking:lane:*`` tags."""
+    if width <= 0:
+        return MultiPolygon()
+    parts: list[BaseGeometry] = []
+    half = width / 2.0
+    for side, sign in (("left", 1.0), ("right", -1.0)):
+        stall = parking_side_width(tags, side)
+        if stall is None:
+            continue
+        outer = line.buffer(half + stall, cap_style="flat")
+        inner = line.buffer(half, cap_style="flat")
+        band = outer.difference(inner)
+        side_clip = line.buffer(sign * (half + stall + 1.0), single_sided=True)
+        parts.append(band.intersection(side_clip))
+    return union_polygons(parts)
+
+
+def parking_from_elements(elements: list[dict[str, Any]], epsg: int, clip: BaseGeometry) -> BaseGeometry:
+    """``amenity=parking`` / ``parking_space`` and separately mapped parking lanes inside ``clip``."""
+    parts: list[BaseGeometry] = []
+    for el in elements:
+        tags = el.get("tags") or {}
+        amenity = str(tags.get("amenity") or "")
+        separately_mapped_lane = str(tags.get("parking") or "") == "lane"
+        if amenity not in {"parking", "parking_space"} and not separately_mapped_lane:
+            continue
+        if tags.get("highway") and amenity == "parking":
+            continue
+        if el.get("type") == "way":
+            poly = way_polygon(el, epsg)
+            if poly is not None:
+                parts.append(poly)
+                continue
+            line = way_line(el, epsg)
+            if line is not None:
+                parts.append(line.buffer(PARKING_LANE_WAY_HALF_M, cap_style="flat"))
+        elif el.get("type") == "node" and amenity == "parking_space":
+            pt = node_point(el, epsg)
+            if pt is not None:
+                parts.append(pt.buffer(PARKING_SPACE_NODE_R_M))
+    return union_polygons(parts, clip)
 
 
 def find_junctions(axis: LineString, highways: list[tuple[dict[str, Any], LineString]],
@@ -795,7 +895,14 @@ def build_osm_layers(axis: LineString, data: dict[str, Any], epsg: int, *,
             cycle_parts.append(ln)
     cycleways = union_lines(cycle_parts, clip)
 
-    plantable = _polygonal(make_valid(sidewalks.difference(buildings).difference(carriageway)))
+    parking_parts = [_parking_band(ln, el.get("tags") or {}, carriageway_width(el.get("tags") or {}))
+                     for el, ln in highways]
+    parking_parts.append(parking_from_elements(data.get("elements") or [], epsg, clip))
+    parking = union_polygons(parking_parts, clip)
+    if not parking.is_empty:
+        sidewalks = _polygonal(make_valid(sidewalks.difference(parking)))
+    plantable = _polygonal(make_valid(
+        sidewalks.difference(buildings).difference(carriageway).difference(parking)))
     junctions = find_junctions(axis, highways, set(axis_ids), clip)
     for el in data.get("elements") or []:
         if el.get("type") == "node" and (el.get("tags") or {}).get("highway") == "crossing":
@@ -806,8 +913,9 @@ def build_osm_layers(axis: LineString, data: dict[str, Any], epsg: int, *,
                 junctions.append(pt)
     trees = trees_from_elements(tree_els, epsg, clip)
     return OsmLayers(carriageway=carriageway, sidewalks=sidewalks, plantable=plantable,
-                     buildings=buildings, cycleways=cycleways, junctions=junctions, trees=trees,
-                     axis_way_ids=axis_ids, half_width_m=half_width, warnings=warnings)
+                     buildings=buildings, cycleways=cycleways, parking=parking,
+                     junctions=junctions, trees=trees, axis_way_ids=axis_ids,
+                     half_width_m=half_width, warnings=warnings)
 
 
 # ----------------------------------------------------------------------------- context assembly
@@ -819,7 +927,8 @@ def street_id_for(city_id: str, name: str, axis: LineString) -> str:
 
 def assemble_context(*, city: CityInfo, epsg: int, name: str, axis: LineString,
                      carriageway: BaseGeometry, sidewalks: BaseGeometry, plantable: BaseGeometry,
-                     buildings: BaseGeometry, cycleways: BaseGeometry, junctions: list[Point],
+                     buildings: BaseGeometry, cycleways: BaseGeometry, parking: BaseGeometry,
+                     junctions: list[Point],
                      trees: list[ExistingTree], basis: dict[str, Basis], sources: dict[str, str],
                      warnings: list[str], way_ids: list[int]) -> StreetContext:
     """Build a StreetContext with the conventional corridor and every layer key filled."""
@@ -831,8 +940,9 @@ def assemble_context(*, city: CityInfo, epsg: int, name: str, axis: LineString,
     return StreetContext(
         street_id=street_id_for(city.id, name, axis), city=city, name=name, epsg=epsg, axis=axis,
         carriageway=carriageway, sidewalks=sidewalks, plantable=plantable, buildings=buildings,
-        cycleways=cycleways, junctions=junctions, existing_trees=trees, corridor=corridor,
-        basis=full_basis, sources=full_sources, warnings=list(warnings), osm_way_ids=list(way_ids))
+        cycleways=cycleways, parking=parking, junctions=junctions, existing_trees=trees,
+        corridor=corridor, basis=full_basis, sources=full_sources, warnings=list(warnings),
+        osm_way_ids=list(way_ids))
 
 
 def context_from_osm_layers(city: CityInfo, epsg: int, name: str, axis: LineString,
@@ -840,15 +950,16 @@ def context_from_osm_layers(city: CityInfo, epsg: int, name: str, axis: LineStri
     """StreetContext where every layer comes from OSM estimation."""
     basis: dict[str, Basis] = {
         "carriageway": "estimated", "sidewalks": "estimated", "plantable": "estimated",
-        "buildings": "measured", "cycleways": "estimated", "junctions": "measured",
-        "existing_trees": "estimated",
+        "buildings": "measured", "cycleways": "estimated", "parking": "estimated",
+        "junctions": "measured", "existing_trees": "estimated",
     }
     sources = {key: OSM_ATTRIBUTION for key in basis}
     return assemble_context(
         city=city, epsg=epsg, name=name, axis=axis, carriageway=layers.carriageway,
         sidewalks=layers.sidewalks, plantable=layers.plantable, buildings=layers.buildings,
-        cycleways=layers.cycleways, junctions=layers.junctions, trees=layers.trees, basis=basis,
-        sources=sources, warnings=[*warnings, *layers.warnings], way_ids=layers.axis_way_ids)
+        cycleways=layers.cycleways, parking=layers.parking, junctions=layers.junctions,
+        trees=layers.trees, basis=basis, sources=sources,
+        warnings=[*warnings, *layers.warnings], way_ids=layers.axis_way_ids)
 
 
 # ----------------------------------------------------------------------------- resolution
@@ -918,7 +1029,7 @@ async def resolve_street_point(point: tuple[float, float], *, epsg: int,
     """Snap a click to an actual road within 30 m; retain the clicked section."""
     lon, lat = point
     if city_bbox and not (city_bbox[0] <= lon <= city_bbox[2] and city_bbox[1] <= lat <= city_bbox[3]):
-        raise StreetNotFound("Click inside the selected city, or choose Anywhere (OSM).")
+        raise StreetNotFound("Click a street in Zürich.")
     anchor = crs.to_metric(Point(lon, lat), epsg)
     bbox = crs.to_wgs(anchor.buffer(40), epsg).bounds
     query = f'[out:json][timeout:25];way["highway"]({_ql_bbox(bbox)});out tags geom;'
@@ -970,87 +1081,7 @@ async def fetch_area(axis: LineString, epsg: int) -> dict[str, Any]:
 
 async def osm_street_context(city: CityInfo, epsg: int, axis: LineString, name: str,
                              way_ids: list[int], warnings: list[str]) -> StreetContext:
-    """Full StreetContext from OSM alone (generic adapter, Berlin geometry)."""
+    """Full StreetContext from OSM geometry and trees."""
     data = await fetch_area(axis, epsg)
     layers = build_osm_layers(axis, data, epsg, axis_way_ids=way_ids)
     return context_from_osm_layers(city, epsg, name, axis, layers, warnings)
-
-
-# ----------------------------------------------------------------------------- generic adapter
-OSM_INFO = CityInfo(
-    id="osm", name="Anywhere (OpenStreetMap)", country="", epsg=3857,
-    center=[8.5417, 47.3769], zoom=12, utc_offset_hours=2.0,
-    basemaps=[
-        Basemap(id="light", label="CARTO light", tiles=["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
-                attribution="© OpenStreetMap contributors © CARTO", max_zoom=19, default=True),
-        Basemap(id="osm", label="OpenStreetMap", tiles=["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-                attribution="© OpenStreetMap contributors", max_zoom=19),
-    ],
-    demo_streets=["Rue de Rivoli, Paris", "Karl-Marx-Allee, Berlin", "Marktgasse, Winterthur"],
-    tree_source=OSM_ATTRIBUTION, geometry_source=OSM_ATTRIBUTION)
-
-
-def split_street_city(query: str) -> tuple[str, str]:
-    """"street, city" -> (street, city); raises StreetNotFound without a comma."""
-    if "," not in (query or ""):
-        raise StreetNotFound("Use 'street, city' (for example 'Marktgasse, Winterthur')")
-    street, _, city = query.rpartition(",")
-    street, city = street.strip(), city.strip()
-    if not street or not city:
-        raise StreetNotFound("Use 'street, city' (for example 'Marktgasse, Winterthur')")
-    return street, city
-
-
-class OsmAdapter(CityAdapter):
-    """Any street OpenStreetMap covers, in the local UTM zone."""
-
-    info = OSM_INFO
-
-    async def street_from_point(self, point: tuple[float, float]) -> StreetContext:
-        epsg = crs.utm_epsg(*point)
-        resolved = await resolve_street_point(point, epsg=epsg)
-        return await self._build(resolved.axis, resolved.name, resolved.way_ids, resolved.warnings, epsg)
-
-    async def _city_bbox(self, city: str, fallback: dict[str, Any] | None) -> BBox:
-        """Bounding box of the city from Nominatim; else 3 km around the street hit."""
-        try:
-            results = await nominatim_search(city, limit=1)
-        except UpstreamUnavailable:
-            results = []
-        if results and results[0].get("boundingbox"):
-            return nominatim_bbox(results[0])
-        if fallback is not None and fallback.get("boundingbox"):
-            return pad_bbox(nominatim_bbox(fallback), 0.03)
-        raise StreetNotFound(f"Unknown city '{city}'")
-
-    async def find_street(self, query: str) -> StreetContext:
-        """Resolve "street, city" anywhere and build its context from OSM."""
-        street, city = split_street_city(query)
-        results = await nominatim_search(f"{street}, {city}")
-        hit = pick_nominatim_street(results, street)
-        anchor_hit = hit or (results[0] if results else None)
-        bbox = await self._city_bbox(city, anchor_hit)
-        centre_lon = (bbox[0] + bbox[2]) / 2.0
-        centre_lat = (bbox[1] + bbox[3]) / 2.0
-        if hit is not None:
-            centre_lon, centre_lat = float(hit["lon"]), float(hit["lat"])
-        epsg = crs.utm_epsg(centre_lon, centre_lat)
-        resolved = await resolve_street_axis(street, city_bbox=bbox, epsg=epsg, city_label=city)
-        return await self._build(resolved.axis, f"{resolved.name}, {city}", resolved.way_ids,
-                                 resolved.warnings, epsg)
-
-    async def street_from_line(self, coords_wgs: list[tuple[float, float]], name: str | None = None) -> StreetContext:
-        """Context around a user-drawn axis; CRS = UTM zone of its first point."""
-        if not coords_wgs:
-            raise StreetNotFound("A drawn street needs at least two points")
-        lon, lat = float(coords_wgs[0][0]), float(coords_wgs[0][1])
-        epsg = crs.utm_epsg(lon, lat)
-        warnings: list[str] = []
-        axis = drawn_axis(coords_wgs, epsg, warnings)
-        return await self._build(axis, name or "Drawn street", [], warnings, epsg)
-
-    async def _build(self, axis: LineString, name: str, way_ids: list[int],
-                     warnings: list[str], epsg: int) -> StreetContext:
-        mid = crs.to_wgs(axis.interpolate(0.5, normalized=True), epsg)
-        city = self.info.model_copy(update={"epsg": epsg, "center": [round(mid.x, 6), round(mid.y, 6)]})
-        return await osm_street_context(city, epsg, axis, name, way_ids, warnings)

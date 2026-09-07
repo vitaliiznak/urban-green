@@ -226,7 +226,7 @@ if WEB_DIR.is_dir():
 
 
 # ------------------------------------------------------------------ cache pre-warm
-PREWARM = [("zurich", "Langstrasse"), ("zurich", "Josefstrasse"), ("berlin", "Rigaer Straße")]
+PREWARM = [("zurich", "Langstrasse"), ("zurich", "Josefstrasse")]
 
 
 async def _prewarm() -> None:

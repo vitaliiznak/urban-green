@@ -21,9 +21,8 @@ server/
   crs.py                to_metric / to_wgs / feature helpers (DONE)
   adapters/             [owner: ADAPTERS]
     base.py             StreetContext, ExistingTree, CityAdapter (DONE)
-    osm.py              Overpass + Nominatim helpers, generic "osm" adapter (any city)
+    osm.py              Overpass + Nominatim helpers for Zürich
     zurich.py           canton cadastre polygons + city tree WFS (fallback OSM trees)
-    berlin.py           Berlin tree cadastre WFS + OSM geometry
     serialize.py        StreetContext -> StreetResponse (GeoJSON in WGS84)
     __init__.py         ADAPTERS registry: dict[str, CityAdapter]; get_adapter(id)
   engine/               [owner: ENGINE]
@@ -50,8 +49,7 @@ Run tests with `.venv/bin/python -m pytest -q`. Network tests must be skipped un
 
 ## Geometry conventions
 
-- Engine and adapters work in the city's metric CRS (`CityInfo.epsg`): Zürich 2056,
-  Berlin 25833, generic OSM adapter: `crs.utm_epsg(lon, lat)`.
+- Engine and adapters work in the city's metric CRS (`CityInfo.epsg`): Zürich 2056.
 - `StreetContext.axis` is ONE merged LineString. Stations (`station_m`) are distances
   along it. "left"/"right" are relative to the axis direction (left = +90° from tangent).
 - `corridor = axis.buffer(15.0, cap_style="flat")` (clip everything to `corridor.buffer(5)`
@@ -67,14 +65,6 @@ Run tests with `.venv/bin/python -m pytest -q`. Network tests must be skipped un
 
 Data sources verified live on 2026-09-07/08 (fixtures of real responses in `tests/fixtures/`):
 
-- Berlin tree cadastre WFS 2.0.0: `https://gdi.berlin.de/services/wfs/baumbestand`
-  `typeNames=baumbestand:strassenbaeume&outputFormat=application/json&srsName=EPSG:4326
-  &bbox=minlat,minlon,maxlat,maxlon,urn:ogc:def:crs:EPSG::4326&count=N` (NOTE: lat/lon
-  axis order in bbox for 4326 on this server; the returned coordinates are [lon, lat]).
-  Properties: `art_bot`, `art_dtsch`, `gattung`, `pflanzjahr`, `standalter`, `kronedurch`
-  (metres, ~20 % null), `stammumfg`, `baumhoehe`, `strname`. There is also layer
-  `baumbestand:anlagenbaeume` (park trees) — include it too, tagged source "park".
-  CORS `*`. Attribution: "Baumbestand Berlin, Geoportal Berlin / SenMVKU (dl-de/by-2-0)".
 - Zürich canton cadastre WFS 2.0.0: `https://maps.zh.ch/wfs/OGDZHWFS`
   `typename=ms:ogd-0401_arv_basis_avzh_bodenbedeckung_f&outputFormat=geojson
   &srsname=EPSG:2056&bbox=minx,miny,maxx,maxy,EPSG:2056&count=5000`.
@@ -103,8 +93,7 @@ Data sources verified live on 2026-09-07/08 (fixtures of real responses in `test
   -> `shapely.ops.linemerge` -> if several parts, take the longest and warn.
   Cap the axis at 2500 m (take the part around the middle, warn) to keep planning fast.
 
-Street geometry from OSM (used by Berlin and generic adapters, and by Zürich when the
-cadastre is empty): carriageway = axis.buffer(width/2) with width from tags
+Street geometry from OSM (used by Zürich when the cadastre is empty): carriageway = axis.buffer(width/2) with width from tags
 `width` > `lanes*3.0` > default by `highway` class (primary 11, secondary 9, tertiary 8,
 residential 6.5, living_street 5, unclassified 6.5, service 4, pedestrian 0 -> no carriageway),
 basis = estimated. Sidewalks: tags `sidewalk=both|left|right|no`, default both for
@@ -124,31 +113,24 @@ Each adapter exposes `info: CityInfo` with basemaps:
   (attribution "© swisstopo", max_zoom 20, default) and grey map
   `https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-grau/default/current/3857/{z}/{x}/{y}.jpeg`.
   center [8.5285, 47.3772] zoom 16, demo_streets ["Langstrasse", "Josefstrasse", "Hohlstrasse", "Badenerstrasse", "Weststrasse"].
-- Berlin: aerial WMS `https://gdi.berlin.de/services/wms/truedop_2024?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=truedop_2024&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png`
-  (attribution "© Geoportal Berlin / DOP 2024", default) and CARTO light
-  `https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png` (attribution "© OpenStreetMap contributors © CARTO").
-  center [13.4700, 52.5150] zoom 15.5, demo_streets ["Rigaer Straße", "Frankfurter Allee", "Bergmannstraße", "Karl-Marx-Allee", "Boxhagener Straße"].
-- osm (generic, id "osm", name "Anywhere (OpenStreetMap)"): CARTO light + OSM standard
-  `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. `find_street` query must contain a
-  comma: "street, city". center [8.5417, 47.3769] zoom 12, demo_streets ["Rue de Rivoli, Paris", "Karl-Marx-Allee, Berlin", "Marktgasse, Winterthur"].
-All three: utc_offset_hours 2.0 (summer time), country codes CH/DE/"".
+  utc_offset_hours 2.0 (summer time), country code CH.
 
 `serialize.py`: `serialize_street(ctx) -> StreetResponse`. Feature properties:
 existing_trees: `{id, species, genus, crown_d_m, crown_imputed, height_m, planted_year, source}`;
 junctions: `{id}`; cycleways/carriageway/sidewalks/plantable/buildings/corridor: `{layer}`;
 axis: `{name, length_m}`. Multi-geometries may be emitted as one Feature.
 
-`__init__.py`: `ADAPTERS = {"zurich": ZurichAdapter(), "berlin": BerlinAdapter(), "osm": OsmAdapter()}`
-plus `"demo": DemoAdapter()` wrapping `engine.synthetic.synthetic_street` (no network; name
-"Demo street (offline)"; a straight 400 m street in Zürich's CRS near [8.53, 47.38]; basemap
-pixelkarte-grau). `get_adapter(city_id)` raises KeyError.
+`__init__.py`: `ADAPTERS = {"zurich": ZurichAdapter(), "demo": DemoAdapter()}` with
+`PUBLIC_CITIES = ("zurich",)`. Demo wraps `engine.synthetic.synthetic_street` (no network;
+name "Demo street (offline)"; a straight 400 m street in Zürich's CRS near [8.53, 47.38];
+basemap pixelkarte-grau) and is for tests only. `get_adapter(city_id)` raises KeyError.
 
 Cache every upstream response 15 min in-process keyed by URL+params. All fetches async
 httpx with timeout 30 s (6 s for the Zürich tree WFS). Never raise on a missing optional
 layer: leave it empty, set basis "unknown" and append a warning. Raise `StreetNotFound`
 when the name cannot be resolved, `UpstreamUnavailable` when Overpass/Nominatim fail.
 
-Tests (`tests/test_adapters.py`): parse the fixture files offline (Berlin tree props,
+Tests (`tests/test_adapters.py`): parse the fixture files offline (
 Zürich landcover classification, Overpass ways -> axis/carriageway/sidewalks/junctions,
 Nominatim pick). Network tests behind `CANOPY_NETWORK_TESTS=1`.
 
@@ -362,7 +344,7 @@ Deploy: `Dockerfile` (python:3.12-slim, copy pyproject + server + web + rules, `
 `CMD uvicorn server.app:app --host 0.0.0.0 --port ${PORT:-8000}`), `fly.toml` (app
 "urban-green", region fra, 1 shared-cpu 512 MB, internal_port 8000, http_service
 force_https, auto_stop_machines off, min_machines_running 1), `.dockerignore`.
-`run.sh`: `.venv/bin/uvicorn server.app:app --reload --port ${PORT:-8000}`.
+`run.sh`: creates `.venv` and `.env` if needed, then `.venv/bin/uvicorn server.app:app --reload --port ${PORT:-8000}`.
 
 Tests (`tests/test_api.py`): TestClient with city "demo": config, street, plan, canopy,
 shade, compare, export, rules override flow, agent 503 when no key (monkeypatch env),
@@ -379,9 +361,9 @@ Page name: **Urban Green**. One committed dark theme (aerial imagery under dark 
 explicitly: ground `#0F1512`, panel `#17201B` (92 % alpha over the map), line `#2A3630`,
 ink `#E8EDE6`, muted `#9AA89E`, accent (canopy) `#7FD069`, mature crown fill `#2F8F4E`,
 valid `#58C97A`, conditional `#F2B84B`, invalid `#F0574F`, shade `#7C9CFF` at 35 %,
-cycleway `#4FA3E0`, existing trees `#A3C69C`. Verdict colour is never the only encoding:
-site markers also carry a ring (valid solid, conditional dashed, invalid crossed) and the
-legend names them.
+cycleway `#4FA3E0`, existing trees `#C4A06A` as filled squares. Proposed sites use a ring
+(valid solid, conditional dashed, invalid crossed) in verdict colour, never colour alone,
+and the map key names existing squares versus proposed rings.
 
 Layout (desktop first, works at 1280×800; below 900 px the panels stack under the map):
 - Map full-bleed. Top-left floating header: wordmark "Urban Green" (Instrument Serif) +
@@ -426,9 +408,9 @@ centre latitude on `zoom` events and set the circle radius expression with
 site id, station "0+240", side, verdict, each rule as "✓/✗ label — measured vs required
 (must/should, § ref)". Click an existing tree -> species, crown, planted year, source.
 
-First frame: on load fetch `/api/config`, select the first city, load its first demo street,
-run a plan with defaults, fit bounds, year = 30. If `POST /api/street` fails (upstream down),
-fall back to city "demo" and say so in the status strip. Everything visible at rest,
+First frame: on load fetch `/api/config`, select Zürich, wait for the planner to pick a
+street, year = 30. If `POST /api/street` fails (upstream down), show the error in the
+status strip. Everything visible at rest,
 `prefers-reduced-motion` disables the growth animation (jumps to the final year).
 Keyboard: Enter sends chat, Escape closes modals. Visible focus states. Keep `app.js`
 in one file with small functions; no `alert()`s; errors go to the status strip.

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4.130.0/config-schema.json",
+  "name": "urban-green",
+  "account_id": "c43726846f412f9d628c2f83229a790c",
+  "main": "worker.ts",
+  "compatibility_date": "2026-09-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "observability": {
+    "enabled": true
+  },
+  "containers": [
+    {
+      "class_name": "UrbanGreen",
+      "image": "./Dockerfile",
+      "max_instances": 1,
+      "instance_type": "basic"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "URBAN_GREEN",
+        "class_name": "UrbanGreen"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["UrbanGreen"]
+    }
+  ]
+}

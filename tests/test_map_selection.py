@@ -59,7 +59,7 @@ async def test_long_street_keeps_clicked_end_when_capped(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_click_outside_city_rejected_before_network():
-    with pytest.raises(StreetNotFound, match="inside the selected city"):
+    with pytest.raises(StreetNotFound, match="Click a street in Zürich"):
         await osm.resolve_street_point((13.4, 52.5), epsg=EPSG, city_bbox=(8.44, 47.32, 8.63, 47.43))
 
 

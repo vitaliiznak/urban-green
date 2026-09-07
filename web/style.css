@@ -16,7 +16,7 @@
   --invalid: #F0574F;
   --shade: #7C9CFF;
   --cycle: #4FA3E0;
-  --existing: #A3C69C;
+  --existing: #C4A06A;
 
   --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -512,6 +512,7 @@ button.badge:hover { background: rgba(232, 237, 230, 0.08); }
 .sw-shade { color: var(--shade); }
 .sw-carriageway { color: #FFFFFF; }
 .sw-sidewalk { color: var(--accent); }
+.sw-parking { color: #E8C46E; }
 .sw-plantable { color: var(--accent); }
 .sw-building { color: var(--ink); }
 .sw-cycle { color: var(--cycle); }
@@ -661,6 +662,8 @@ button.badge:hover { background: rgba(232, 237, 230, 0.08); }
 .pop { display: flex; flex-direction: column; gap: 6px; min-width: 240px; }
 .pop-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .pop-title { font-weight: 600; font-size: var(--fs-md); }
+.pop-title-existing { color: var(--existing); }
+.pop-title-proposed { color: var(--valid); }
 .pop-meta { color: var(--muted); }
 .verdict { font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
 .verdict-valid { color: var(--valid); }
@@ -743,7 +746,10 @@ button.badge:hover { background: rgba(232, 237, 230, 0.08); }
 .change-street { margin-left: auto; color: var(--accent); font-size: 12px; font-weight: 400; }
 #street-picker[open] .change-street { font-size: 0; }
 #street-picker[open] .change-street::after { content: '−'; font-size: 18px; }
-.map-key { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; }
+.map-key { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 8px; font-size: 12px; }
+.map-key-kinds, .map-key-verdicts { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.key-existing { color: var(--existing); font-weight: 600; }
+.key-proposed { color: var(--valid); font-weight: 600; }
 .map-toolbar { align-items: flex-start; }
 .legend { top: 140px; }
 @media (max-width: 700px) { .legend { top: 130px; } }
@@ -763,8 +769,8 @@ button.badge:hover { background: rgba(232, 237, 230, 0.08); }
   .legend { top: 170px; }
 }
 
-/* Explain status separately from the green crown shapes. */
-.map-key { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px 14px; }
+/* Explain status separately from the crown shapes. */
+.map-key { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .map-color-note { max-width: 650px; color: var(--muted); font-size: 12px; margin-top: 8px; }
 .legend { top: auto; bottom: 160px; }
 .review-reasons { display: flex; flex-direction: column; gap: 8px; }

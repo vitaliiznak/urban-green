@@ -3,7 +3,7 @@
 **Name a street. Explore proposed tree positions under a cited rule pack and estimate their canopy over 30 years.**
 
 Urban Green is an agentic street-tree planner built as an overnight MVP for the goNEON
-"Platform & Ecosystem Owner" exercise. A planner picks a city and a street (or draws one),
+"Platform & Ecosystem Owner" exercise. A planner picks a Zürich street (or draws one),
 the engine proposes tree positions at a chosen spacing, checks each one against a planting
 standard whose every distance carries its source, and projects crown growth, canopy cover
 and one afternoon's shade. A chat agent drives exactly the same tools and explains the result
@@ -16,18 +16,18 @@ the agent does; the chat panel just says the agent is offline).
 ## Quick start
 
 ```bash
-# Python 3.11+ and uv (or pip)
-uv venv .venv && uv pip install -p .venv/bin/python -e ".[dev]"
-cp .env.example .env            # add OPENAI_API_KEY or ANTHROPIC_API_KEY to enable the agent
-./run.sh                        # http://localhost:8000
+# Python 3.11+; uv is used when installed, otherwise python3 + pip
+./run.sh                        # creates .venv and .env if needed; uses 8000 or the next free port
 .venv/bin/python -m pytest -q   # unit + API tests, no network needed
 ```
 
-Open http://localhost:8000. Choose a city, then click a street on the map, enter a
+Optional: add `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` to `.env` to enable the agent.
+
+Open http://localhost:8000. Click a Zürich street on the map, enter a
 street name, select an example, or use **Draw street** to mark a route. No street is loaded automatically.
 Map selection snaps to an actual OpenStreetMap road within 30 m and creates a plan.
 Use **Select street on map** to pick another street. Escape cancels selection;
-at a distant zoom, the first click zooms in. The offline demo uses name/drawing only.
+at a distant zoom, the first click zooms in.
 Drawing supports **Undo last point**, **Finish drawing** and **Cancel drawing**.
 Follow **Choose a street → Adjust the trees → Review your plan → Compare temperatures**.
 Expand the street selector to change location; adjust spacing, street sides or species, then
@@ -87,7 +87,7 @@ OpenAPI UI: http://localhost:8000/docs.
 
 | Action | Where | What happens |
 |---|---|---|
-| Load a street | click a street, city + name, or **Draw street** | adapter fetches carriageway, sidewalks, buildings, cycle paths, junctions, existing trees for the corridor (axis ± 15 m) |
+| Load a street | click a street, name, or **Draw street** | adapter fetches carriageway, sidewalks, buildings, cycle paths, junctions, existing trees for the corridor (axis ± 15 m) |
 | Plan trees | Plan card or the agent | candidate trunks at the chosen spacing, offset from the carriageway edge; every candidate evaluated against the rule pack; **valid / conditional / invalid** |
 | Pack | mode = pack | greedy walk along the street: trees slide to the nearest legal position; gaps are reported with the rule that caused them |
 | Grow | year slider 0–30 | crowns grow with a species curve; canopy % of corridor, of street space, of sidewalk |
@@ -101,9 +101,6 @@ OpenAPI UI: http://localhost:8000/docs.
 | City | Street geometry | Existing trees | Basemap |
 |---|---|---|---|
 | Zürich | Canton cadastre (Amtliche Vermessung): carriageway, sidewalk, building polygons — *measured* | City tree cadastre WFS when it answers; otherwise OpenStreetMap trees with imputed crowns (a warning says so) | swisstopo SWISSIMAGE / grey map |
-| Berlin | OpenStreetMap: carriageway width from tags or highway class, sidewalks 2.5 m — *estimated*; buildings measured | Berlin tree cadastre (Baumbestand, 434,765 street trees) with measured crown diameters | Berlin true orthophoto 2024 / CARTO |
-| Anywhere (OSM) | OpenStreetMap, estimated | OpenStreetMap trees, imputed crowns | CARTO / OSM |
-| Demo (offline) | synthetic 400 m street | synthetic | swisstopo grey map |
 
 The UI's status strip shows the attribution and *measured / estimated* basis per layer, and
 every rule result carries the same basis, so a planner always knows when a 0.4 m distance was
@@ -126,7 +123,7 @@ measured crown get a genus-based estimate (flagged `crown_imputed`).
 web/            one static MapLibre page (no build step)
 server/
   adapters/     one class per data source -> StreetContext (Shapely, metric CRS)
-                zurich.py  berlin.py  osm.py (anywhere)  demo (synthetic)
+                zurich.py  osm.py (helpers)
   engine/       deterministic geometry: sites.py rules.py canopy.py shade.py species.py
   service.py    use-cases shared by the three fronts, in-memory store (TTL 3 h)
   app.py        FastAPI: /api/* JSON, /api/agent SSE, static UI, /docs
@@ -187,8 +184,8 @@ are cached for 15 minutes.
 ## How to build on it
 
 - **Add a city:** subclass `CityAdapter` in `server/adapters/`, return a `StreetContext`
-  (see `berlin.py`: about 150 lines, one WFS call plus the shared OSM helpers), register it in
-  `ADAPTERS`. The UI, agent and MCP pick it up from `/api/config`.
+  (see `zurich.py` and the shared OSM helpers), register it in `ADAPTERS` and `PUBLIC_CITIES`.
+  The UI, agent and MCP pick it up from `/api/config`.
 - **Add a rule pack:** drop a JSON file in `rules/` following `berlin_strassenbaeume_2024.json`
   (every rule: subject, reference, distance, must/should, source_ref, quote, assumption flag).
   The generic runner in `server/engine/rules.py` applies it; new `reference` kinds need one

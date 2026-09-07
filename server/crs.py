@@ -1,6 +1,6 @@
-"""Projection helpers. The engine works in a local metric CRS per city
-(EPSG:2056 for Zürich, EPSG:25833 for Berlin, UTM elsewhere); the API boundary
-converts to/from WGS84 (EPSG:4326, lon/lat) so the browser never sees metres."""
+"""Projection helpers. The engine works in a local metric CRS
+(EPSG:2056 for Zürich); the API boundary converts to/from WGS84
+(EPSG:4326, lon/lat) so the browser never sees metres."""
 from __future__ import annotations
 
 import math

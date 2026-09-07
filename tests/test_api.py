@@ -66,7 +66,7 @@ def test_health_and_config(client: TestClient) -> None:
     assert health.headers["X-Session-Id"] == SID
 
     cfg = client.get("/api/config").json()
-    assert {c["id"] for c in cfg["cities"]} >= {"demo"}
+    assert {c["id"] for c in cfg["cities"]} == {"zurich"}
     assert any(p["id"] == "berlin_strassenbaeume_2024" for p in cfg["rule_packs"])
     assert any(s["id"] == "tilia_cordata" for s in cfg["species"])
     assert cfg["defaults"]["spacing_m"] == 8.0

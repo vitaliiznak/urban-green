@@ -1,0 +1,12 @@
+{
+  "name": "urban-green",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/containers": "^0.0.31",
+    "wrangler": "4.130.0"
+  }
+}

@@ -35,9 +35,10 @@ class StreetContext:
     axis: LineString                # street centreline, metric CRS, single merged part
     carriageway: BaseGeometry       # (Multi)Polygon union, may be empty
     sidewalks: BaseGeometry
-    plantable: BaseGeometry         # where a trunk may stand: sidewalks + verges/green, minus buildings
+    plantable: BaseGeometry         # where a trunk may stand: sidewalks + verges/green, minus buildings and parking
     buildings: BaseGeometry
     cycleways: BaseGeometry         # (Multi)LineString, may be empty
+    parking: BaseGeometry           # on-street bays, parking_space polygons, paved lots; may be empty
     junctions: list[Point]
     existing_trees: list[ExistingTree]
     corridor: Polygon               # analysis area: axis.buffer(15, cap_style=flat) by convention
@@ -52,11 +53,11 @@ class StreetContext:
 
 
 class CityAdapter(ABC):
-    """Implementations: server/adapters/zurich.py, berlin.py, osm.py (generic)."""
+    """Implementations: server/adapters/zurich.py."""
     info: CityInfo
 
     async def street_from_point(self, point: tuple[float, float]) -> StreetContext:
-        raise StreetNotFound("Map selection needs a real city. Choose Zürich, Berlin or Anywhere (OSM).")
+        raise StreetNotFound("Click a street in Zürich.")
 
     @abstractmethod
     async def find_street(self, query: str) -> StreetContext:

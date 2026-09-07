@@ -221,16 +221,19 @@ class ZurichAdapter(CityAdapter):
 
         basis: dict[str, Basis] = {}
         sources: dict[str, str] = {}
+        osm_parking = osm_layers.parking if osm_layers is not None else None
         if landcover is not None:
-            carriageway, sidewalks, plantable, buildings = self._measured_layers(
-                landcover, axis, clip, osm_layers, basis, sources, warnings)
+            carriageway, sidewalks, plantable, buildings, parking = self._measured_layers(
+                landcover, axis, clip, osm_layers, osm_parking, basis, sources, warnings)
         else:
             assert osm_layers is not None
-            carriageway, sidewalks, plantable, buildings = (
-                osm_layers.carriageway, osm_layers.sidewalks, osm_layers.plantable, osm_layers.buildings)
+            carriageway, sidewalks, plantable, buildings, parking = (
+                osm_layers.carriageway, osm_layers.sidewalks, osm_layers.plantable,
+                osm_layers.buildings, osm_layers.parking)
             basis.update({"carriageway": "estimated", "sidewalks": "estimated",
-                          "plantable": "estimated", "buildings": "measured"})
-            sources.update({k: OSM_ATTRIBUTION for k in ("carriageway", "sidewalks", "plantable", "buildings")})
+                          "plantable": "estimated", "buildings": "measured", "parking": "estimated"})
+            sources.update({k: OSM_ATTRIBUTION for k in
+                            ("carriageway", "sidewalks", "plantable", "buildings", "parking")})
 
         if osm_layers is not None:
             cycleways, junctions = osm_layers.cycleways, osm_layers.junctions
@@ -244,7 +247,8 @@ class ZurichAdapter(CityAdapter):
         return assemble_context(
             city=self.info, epsg=EPSG, name=name, axis=axis, carriageway=carriageway,
             sidewalks=sidewalks, plantable=plantable, buildings=buildings, cycleways=cycleways,
-            junctions=junctions, trees=trees, basis=basis, sources=sources, warnings=warnings,
+            parking=parking, junctions=junctions, trees=trees, basis=basis, sources=sources,
+            warnings=warnings,
             way_ids=osm_layers.axis_way_ids if osm_layers is not None else way_ids)
 
     @staticmethod
@@ -272,8 +276,10 @@ class ZurichAdapter(CityAdapter):
 
     @staticmethod
     def _measured_layers(landcover: Landcover, axis: LineString, clip: BaseGeometry,
-                         osm_layers: OsmLayers | None, basis: dict[str, Basis], sources: dict[str, str],
-                         warnings: list[str]) -> tuple[BaseGeometry, BaseGeometry, BaseGeometry, BaseGeometry]:
+                         osm_layers: OsmLayers | None, osm_parking: BaseGeometry | None,
+                         basis: dict[str, Basis], sources: dict[str, str],
+                         warnings: list[str]) -> tuple[BaseGeometry, BaseGeometry, BaseGeometry,
+                                                       BaseGeometry, BaseGeometry]:
         carriageway, buildings = landcover.carriageway, landcover.buildings
         basis.update({"carriageway": "measured", "buildings": "measured"})
         sources.update({"carriageway": CADASTRE_ATTRIBUTION, "buildings": CADASTRE_ATTRIBUTION,
@@ -290,8 +296,21 @@ class ZurichAdapter(CityAdapter):
                             f"{SIDEWALK_WIDTH_M:g} m beside the carriageway")
         else:
             basis.update({"sidewalks": "measured", "plantable": "measured"})
-        plantable = union_polygons([sidewalks, landcover.green], clip).difference(buildings).difference(carriageway)
-        return carriageway, sidewalks, make_valid(plantable), buildings
+        parking = union_polygons(
+            [g for g in (landcover.paved, osm_parking) if g is not None and not g.is_empty], clip)
+        if not landcover.paved.is_empty:
+            basis["parking"] = "measured"
+            sources["parking"] = CADASTRE_ATTRIBUTION
+        elif parking.is_empty:
+            basis["parking"] = "unknown"
+        else:
+            basis["parking"] = "estimated"
+            sources["parking"] = OSM_ATTRIBUTION
+        if not parking.is_empty:
+            sidewalks = make_valid(sidewalks.difference(parking))
+        plantable = (union_polygons([sidewalks, landcover.green], clip)
+                     .difference(buildings).difference(carriageway).difference(parking))
+        return carriageway, sidewalks, make_valid(plantable), buildings, parking
 
     @staticmethod
     def _trees(result: Any, clip: BaseGeometry, osm_layers: OsmLayers | None,

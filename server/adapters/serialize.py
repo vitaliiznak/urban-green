@@ -8,7 +8,7 @@ from ..schemas import Basis, FeatureCollection, StreetResponse, StreetStats
 from .base import StreetContext
 
 LAYER_KEYS: tuple[str, ...] = ("axis", "carriageway", "sidewalks", "plantable", "buildings",
-                               "cycleways", "junctions", "existing_trees", "corridor")
+                               "cycleways", "parking", "junctions", "existing_trees", "corridor")
 
 
 def _parts(geom: BaseGeometry) -> list[BaseGeometry]:
@@ -60,6 +60,7 @@ def serialize_street(ctx: StreetContext) -> StreetResponse:
             crs.feature(g, epsg, {"layer": "buildings"}) for g in _parts(ctx.buildings)]),
         "cycleways": FeatureCollection(features=[
             crs.feature(g, epsg, {"layer": "cycleways"}) for g in _parts(ctx.cycleways)]),
+        "parking": FeatureCollection(features=_single_feature(ctx.parking, epsg, "parking")),
         "junctions": FeatureCollection(features=[
             crs.feature(pt, epsg, {"id": f"J{i + 1:02d}"}) for i, pt in enumerate(ctx.junctions)]),
         "existing_trees": FeatureCollection(features=[

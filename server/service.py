@@ -19,7 +19,7 @@ from typing import Any, Optional
 import httpx
 
 from . import crs
-from .adapters import ADAPTERS, get_adapter
+from .adapters import ADAPTERS, PUBLIC_CITIES, get_adapter
 from .agent.providers import agent_info
 from .adapters.base import StreetContext, StreetNotFound, UpstreamUnavailable
 from .adapters.serialize import serialize_street
@@ -448,7 +448,7 @@ def export_geojson(scenario_id: str) -> dict[str, Any]:
 def config() -> ConfigResponse:
     """Everything the front-end needs on first load."""
     return ConfigResponse(
-        cities=[adapter.info for adapter in ADAPTERS.values()],
+        cities=[ADAPTERS[city_id].info for city_id in PUBLIC_CITIES if city_id in ADAPTERS],
         rule_packs=list(load_rule_packs().values()),
         species=list(load_species().values()),
         defaults=PlanParams(),

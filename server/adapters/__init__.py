@@ -1,18 +1,17 @@
 """City adapter registry: ``ADAPTERS`` maps a city id to its adapter instance and
-``get_adapter`` looks one up (KeyError when unknown). The offline "demo" adapter
-wraps the engine's synthetic street so the app works without any network."""
+``get_adapter`` looks one up (KeyError when unknown). The public product is
+Switzerland (Zürich). The offline "demo" adapter stays for tests."""
 from __future__ import annotations
 
 from ..schemas import Basemap, CityInfo
 from .base import CityAdapter, ExistingTree, StreetContext, StreetNotFound, UpstreamUnavailable
-from .berlin import BerlinAdapter
-from .osm import OsmAdapter, build_osm_layers, context_from_osm_layers, drawn_axis
+from .osm import build_osm_layers, context_from_osm_layers, drawn_axis
 from .serialize import serialize_street
 from .zurich import ZurichAdapter
 
 DEMO_EPSG = 2056
 DEMO_INFO = CityInfo(
-    id="demo", name="Demo street (offline)", country="", epsg=DEMO_EPSG, center=[8.53, 47.38],
+    id="demo", name="Demo street (offline)", country="CH", epsg=DEMO_EPSG, center=[8.53, 47.38],
     zoom=16, utc_offset_hours=2.0,
     basemaps=[
         Basemap(id="grey", label="Grey map (swisstopo)",
@@ -48,10 +47,9 @@ class DemoAdapter(CityAdapter):
 
 ADAPTERS: dict[str, CityAdapter] = {
     "zurich": ZurichAdapter(),
-    "berlin": BerlinAdapter(),
-    "osm": OsmAdapter(),
     "demo": DemoAdapter(),
 }
+PUBLIC_CITIES = ("zurich",)
 
 
 def get_adapter(city_id: str) -> CityAdapter:
@@ -63,7 +61,7 @@ def get_adapter(city_id: str) -> CityAdapter:
 
 
 __all__ = [
-    "ADAPTERS", "BerlinAdapter", "CityAdapter", "DemoAdapter", "ExistingTree", "OsmAdapter",
+    "ADAPTERS", "PUBLIC_CITIES", "CityAdapter", "DemoAdapter", "ExistingTree",
     "StreetContext", "StreetNotFound", "UpstreamUnavailable", "ZurichAdapter", "get_adapter",
     "serialize_street",
 ]

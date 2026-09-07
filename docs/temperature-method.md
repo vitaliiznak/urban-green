@@ -39,7 +39,7 @@ article's prose.
 ## Interpretation
 
 This is an exploratory transfer of an observational association. It has not been
-calibrated or validated in Zürich, Berlin, or a user-selected street. Actual
+calibrated or validated for a Zürich street. Actual
 cooling may fall outside the sensitivity envelope. It does not establish a
 causal prediction for an individual planting intervention.
 

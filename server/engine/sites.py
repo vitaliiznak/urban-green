@@ -99,7 +99,7 @@ class _Planner:
         origin, normal = axis_frame(self.ctx.axis, station)
         if side == "right":
             normal = (-normal[0], -normal[1])
-        edge, edge_note = carriageway_edge_distance(self.prep.carriageway, origin, normal)
+        edge, edge_note = carriageway_edge_distance(self.prep.edge, origin, normal)
         reach = edge + self.params.offset_from_edge_m
         trunk = Point(origin.x + normal[0] * reach, origin.y + normal[1] * reach)
         verdict, rules, _ = evaluate_site(trunk, self.ctx, self.pack, self.sp, self.params,

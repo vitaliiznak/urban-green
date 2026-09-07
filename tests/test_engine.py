@@ -5,7 +5,7 @@ import math
 import time
 
 import pytest
-from shapely.geometry import Point
+from shapely.geometry import Point, box
 
 from server.engine.canopy import canopy_metrics
 from server.engine.rules import MEASURE_EPS, apply_overrides, evaluate_site, load_rule_packs
@@ -62,7 +62,8 @@ def test_synthetic_geometry(ctx):
     assert ctx.corridor.area == pytest.approx(400 * 30)
     assert not ctx.cycleways.is_empty and ctx.cycleways.length == pytest.approx(200.0)
     assert set(ctx.basis) == {"axis", "carriageway", "sidewalks", "plantable", "buildings", "cycleways",
-                              "junctions", "existing_trees", "corridor"}
+                              "parking", "junctions", "existing_trees", "corridor"}
+    assert ctx.parking.is_empty
 
 
 def test_synthetic_is_deterministic():
@@ -189,7 +190,8 @@ def test_single_side_and_evaluate_site_direct(ctx, pack, tilia):
     assert summary.total == 40 and all(s.side == "left" for s in sites)
     x0, y0 = ctx.axis.coords[0]
     verdict, results, notes = evaluate_site(Point(x0 + 52, y0 - 4.5), ctx, pack, tilia, PlanParams())
-    assert verdict == "valid" and len(results) == len(pack.rules) + 2 and notes == []
+    assert verdict == "valid" and len(results) == len(pack.rules) + 3 and notes == []
+    assert next(r for r in results if r.rule_id == "parking_exclusion").passed is True
     verdict, results, notes = evaluate_site(Point(x0 + 52, y0 - 30), ctx, pack, tilia, PlanParams())
     assert verdict == "invalid"
     by_rule = {r.rule_id: r for r in results}
@@ -360,6 +362,27 @@ def test_plan_sites_long_street_is_fast(pack, tilia):
     elapsed = time.perf_counter() - start
     assert summary.total == len(sites) == 2 * 162
     assert elapsed < 2.0
+
+
+def test_parking_bay_shifts_trunk_off_the_slot(pack, tilia):
+    ctx = synthetic_street()
+    x0, y0 = ctx.axis.coords[0]
+    parking = box(x0 + 40.0, y0 - 5.5, x0 + 70.0, y0 - 3.5)
+    ctx.parking = parking
+    ctx.plantable = ctx.plantable.difference(parking)
+    ctx.basis["parking"] = "estimated"
+    on_bay = Point(x0 + 52.0, y0 - 4.5)
+    verdict, results, notes = evaluate_site(on_bay, ctx, pack, tilia, PlanParams())
+    assert verdict == "invalid"
+    parking_rule = next(r for r in results if r.rule_id == "parking_exclusion")
+    assert parking_rule.passed is False and parking_rule.mode == "must"
+    assert "parking bay" in parking_rule.note
+    assert parking_rule.note in notes
+    sites, _ = plan_sites(ctx, PlanParams(spacing_m=8, side="right", mode="grid"), pack, tilia)
+    site = next(s for s in sites if abs(s.station_m - 52.0) < 0.1)
+    assert not parking.contains(site.pt)
+    assert site.pt.y == pytest.approx(y0 - 6.5, abs=0.05)
+    assert "parking_exclusion" not in site.props.failed_rules
 
 
 @pytest.mark.parametrize("mode", ["grid", "pack"])

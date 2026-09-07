@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
-<link rel="stylesheet" href="/static/style.css?v=a7b34d3a82">
+<link rel="stylesheet" href="/static/style.css?v=parking-off">
 </head>
 <body>
 <header class="app-header">
@@ -31,7 +31,7 @@
     <summary class="step-title"><span class="step-number">1</span> Choose a street <span class="change-street">Change</span></summary>
     <div class="hdr-row">
       <div class="hdr-controls">
-        <label class="field-inline">
+        <label class="field-inline" id="city-field">
           <span class="field-label">City</span>
           <select id="city" class="select select-city" aria-label="City"></select>
         </label>
@@ -198,7 +198,7 @@
         <h2 class="card-title" id="rules-title">Planting rules</h2>
         <span class="card-meta mono" id="rules-meta"></span>
       </summary>
-      <p class="hint">“Must” excludes a failing position; “should” keeps it amber for review. Editing a rule recalculates the current plan. Existing trunk positions and the minimum 10 m junction exclusion always apply, even when editable rules are disabled.</p>
+      <p class="hint">“Must” excludes a failing position; “should” keeps it amber for review. Editing a rule recalculates the current plan. Existing trunk positions, mapped parking bays and the minimum 10 m junction exclusion always apply, even when editable rules are disabled.</p>
       <p class="card-note" id="rules-source"></p>
       <ul class="rules" id="rules"></ul>
       <div class="card-foot">
@@ -214,10 +214,16 @@
     <div>
       <p class="eyebrow">Your street, over time</p>
       <p id="map-hint">Explore a street to see possible tree positions.</p>
-      <div class="map-key" id="map-key" hidden aria-label="Tree position colors">
-        <span class="verdict-valid">● No conflicts</span>
-        <span class="verdict-conditional">◌ Needs review</span>
-        <span class="verdict-invalid">× Excluded</span>
+      <div class="map-key" id="map-key" hidden aria-label="Tree markers">
+        <div class="map-key-kinds">
+          <span class="key-existing">■ Existing</span>
+          <span class="key-proposed">○ Proposed</span>
+        </div>
+        <div class="map-key-verdicts" id="map-key-verdicts" hidden>
+          <span class="verdict-valid">● No conflicts</span>
+          <span class="verdict-conditional">◌ Needs review</span>
+          <span class="verdict-invalid">× Excluded</span>
+        </div>
       </div>
     </div>
     <div class="map-actions">
@@ -260,23 +266,24 @@
       <h2 class="card-title" id="legend-title">Map layers & key</h2>
 
     </summary>
-    <p class="map-color-note">Pale green marks existing trees. Translucent circles show crown size. Amber trees need review but are included; red positions add no canopy or cooling.</p>
-    <p class="map-color-note">New trees stay at least 10 m from mapped junctions and crossings. Unmapped crossings still need site review.</p>
+    <p class="map-color-note">Brown squares are existing trees. Green, amber and red rings are proposed positions. Translucent circles show crown size. Amber rings need review but are included; red rings add no canopy or cooling.</p>
+    <p class="map-color-note">New trees stay at least 10 m from mapped junctions and crossings, and off mapped parking bays. Unmapped crossings still need site review.</p>
     <div class="seg seg-sm" id="basemaps" role="group" aria-label="Basemap"></div>
     <ul class="legend-list">
       <li class="legend-item">
         <label><input type="checkbox" data-layer="existing_trees" checked>
-          <svg class="sw sw-existing" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="currentColor" fill-opacity=".25" stroke="currentColor"/><circle cx="9" cy="9" r="2.2" fill="currentColor"/></svg>
+          <svg class="sw sw-existing" viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="2" width="14" height="14" fill="currentColor" fill-opacity=".22" stroke="currentColor"/><rect x="6" y="6" width="6" height="6" fill="currentColor"/></svg>
           <span>Existing trees</span></label>
       </li>
       <li class="legend-item">
         <label><input type="checkbox" data-layer="crowns" checked>
           <svg class="sw sw-crown" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.5" fill="currentColor" fill-opacity=".35" stroke="currentColor" stroke-opacity=".8"/></svg>
-          <span>Tree crowns</span></label>
+          <span>Proposed crowns</span></label>
       </li>
       <li class="legend-item wide">
         <label><input type="checkbox" data-layer="sites" checked>
-          <span>Positions</span></label>
+          <svg class="sw sw-valid" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="9" r="1.8" fill="#0F1512" stroke="currentColor" stroke-width="1.2"/></svg>
+          <span>Proposed positions</span></label>
       </li>
       <li class="legend-item">
         <label><input type="checkbox" data-layer="carriageway" checked>
@@ -287,6 +294,11 @@
         <label><input type="checkbox" data-layer="sidewalks" checked>
           <svg class="sw sw-sidewalk" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="4" width="15" height="10" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-opacity=".5"/></svg>
           <span>Sidewalk</span></label>
+      </li>
+      <li class="legend-item">
+        <label><input type="checkbox" data-layer="parking" checked>
+          <svg class="sw sw-parking" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="4" width="15" height="10" fill="currentColor" fill-opacity=".22" stroke="currentColor"/></svg>
+          <span>Parking</span></label>
       </li>
       <li class="legend-item">
         <label><input type="checkbox" data-layer="plantable">
@@ -357,6 +369,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
-<script src="/static/app.js?v=4f1bff0ecf"></script>
+<script src="/static/app.js?v=parking-off"></script>
 </body>
 </html>

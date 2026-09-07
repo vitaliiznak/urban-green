@@ -10,8 +10,9 @@ from pathlib import Path
 import pytest
 from shapely.geometry import LineString, Point, box
 
+from server import crs
 from server.adapters import ADAPTERS, DemoAdapter, get_adapter, serialize_street
-from server.adapters import berlin, osm, zurich
+from server.adapters import osm, zurich
 from server.adapters.base import CityAdapter, StreetContext, StreetNotFound
 from server.schemas import CityInfo, StreetResponse
 
@@ -38,43 +39,6 @@ def langstrasse(area_data):
     axis = osm.merge_axis([osm.way_line(e, 2056) for e in ways], warnings)
     layers = osm.build_osm_layers(axis, area_data, 2056, axis_way_ids=[e["id"] for e in ways])
     return axis, layers, warnings
-
-
-# ----------------------------------------------------------------------------- Berlin trees
-def test_berlin_tree_parsing_uses_measured_crowns():
-    trees = berlin.parse_trees(load("berlin_trees_wfs.json"), 25833, EVERYWHERE, "street")
-    assert len(trees) == 50
-    first = trees[0]
-    assert first.id == "00008100_0016858a"
-    assert first.species == "Corylus colurna" and first.genus == "Corylus"
-    assert first.crown_d_m == pytest.approx(7.39) and first.crown_imputed is False
-    assert first.height_m == pytest.approx(8.99) and first.planted_year == 1999
-    assert first.source == "street"
-    # coordinates are [lon, lat] and land in UTM 33N near Friedrichshain
-    assert 395_000 < first.pt.x < 400_000 and 5_818_000 < first.pt.y < 5_821_000
-    assert all(not t.crown_imputed for t in trees)
-
-
-def test_berlin_park_trees_impute_missing_crowns():
-    trees = berlin.parse_trees(load("berlin_park_trees_wfs.json"), 25833, EVERYWHERE, "park")
-    assert len(trees) == 20
-    imputed = [t for t in trees if t.crown_imputed]
-    assert len(imputed) == 4  # kronedurch 0 in the cadastre means "not measured"
-    assert all(t.crown_d_m and t.crown_d_m > 0 for t in imputed)
-    assert {t.genus for t in imputed} == {"Robinia", "Acer"}
-    assert all(t.source == "park" for t in trees)
-
-
-def test_berlin_tree_clip_and_bbox_order():
-    fc = load("berlin_trees_wfs.json")
-    lon, lat = fc["features"][0]["geometry"]["coordinates"]
-    clip = osm.crs.to_metric(Point(lon, lat), 25833).buffer(1.0)
-    assert len(berlin.parse_trees(fc, 25833, clip, "street")) == 1
-    # the request bbox must be lat/lon ordered for this server
-    minlon, minlat, maxlon, maxlat = 13.47, 52.5145, 13.476, 52.5165
-    assert fc["links"][0]["href"].count("BBOX=52.5145%2C13.4700") == 1
-    assert berlin.BERLIN_BBOX[0] < minlon < berlin.BERLIN_BBOX[2]
-    assert berlin.BERLIN_BBOX[1] < minlat < berlin.BERLIN_BBOX[3]
 
 
 # ----------------------------------------------------------------------------- Zürich land cover
@@ -143,6 +107,18 @@ def test_cycle_lane_sides_from_tags():
     assert osm.cycle_lane_sides({"cycleway": "opposite"}) == (False, False)
 
 
+def test_parking_sides_from_tags():
+    assert osm.parking_side_kind({"parking:both": "no"}, "left") is None
+    assert osm.parking_side_kind({"parking:both": "no"}, "right") is None
+    assert osm.parking_side_width({"parking:left": "lane", "parking:right": "no"}, "left") == 2.0
+    assert osm.parking_side_width({"parking:left": "lane", "parking:right": "no"}, "right") is None
+    assert osm.parking_side_width({"parking:both": "street_side", "parking:both:orientation": "diagonal"},
+                                  "left") == 4.8
+    assert osm.parking_side_width({"parking:lane:right": "perpendicular"}, "right") == 5.0
+    assert osm.parking_side_width({"parking:both": "lane", "parking:both:width": "2.4"}, "right") == 2.4
+    assert osm.parking_side_kind({"parking:both": "separate"}, "left") is None
+
+
 def test_osm_layers_from_area_fixture(langstrasse):
     axis, layers, warnings = langstrasse
     assert warnings == []
@@ -162,6 +138,7 @@ def test_osm_layers_from_area_fixture(langstrasse):
     assert layers.sidewalks.intersection(layers.carriageway).area < 1e-6
     assert layers.sidewalks.intersection(layers.buildings).area < 1e-6
     assert layers.plantable.area == pytest.approx(layers.sidewalks.area)
+    assert layers.parking.is_empty
     assert layers.buildings.geom_type == "MultiPolygon" and len(layers.buildings.geoms) >= 5
     assert len(layers.junctions) >= 3
     for pt in layers.junctions:
@@ -184,6 +161,37 @@ def test_cycleways_from_axis_tags_and_cycleway_ways():
     footprints = [osm.way_polygon(e, 2056) for e in data["elements"] if "building" in e["tags"]]
     assert len(footprints) == 4 and all(f is not None and f.is_valid and f.area > 200 for f in footprints)
     assert layers.buildings.is_empty
+
+
+def test_osm_parking_lane_is_removed_from_plantable(langstrasse):
+    axis, layers, _ = langstrasse
+    data = load("overpass_langstrasse_area.json")
+    way_ids = [e["id"] for e in data["elements"]
+               if e.get("type") == "way" and e.get("tags", {}).get("name") == "Langstrasse"]
+    for el in data["elements"]:
+        if el.get("id") in way_ids:
+            el.setdefault("tags", {})["parking:both"] = "lane"
+            el["tags"]["parking:both:orientation"] = "parallel"
+    parked = osm.build_osm_layers(axis, data, 2056, axis_way_ids=way_ids)
+    assert not parked.parking.is_empty
+    assert parked.parking.area > 200
+    assert parked.plantable.intersection(parked.parking).area < 1e-3
+    assert parked.sidewalks.intersection(parked.parking).area < 1e-3
+    assert parked.plantable.area < layers.plantable.area
+
+
+def test_osm_parking_space_polygon_is_excluded():
+    axis = LineString([(2682000.0, 1248000.0), (2682040.0, 1248000.0)])
+    stall_wgs = crs.to_wgs(box(2682008.0, 1247994.0, 2682020.0, 1247998.0), 2056)
+    ring = list(stall_wgs.exterior.coords)
+    stall = {
+        "type": "way", "id": 1, "tags": {"amenity": "parking_space"},
+        "geometry": [{"lon": x, "lat": y} for x, y in ring],
+    }
+    layers = osm.build_osm_layers(axis, {"elements": [stall]}, 2056)
+    assert not layers.parking.is_empty
+    assert layers.parking.area > 10
+    assert layers.plantable.intersection(layers.parking).area < 1e-3
 
 
 def test_tree_nodes_measured_and_imputed(area_data):
@@ -253,9 +261,6 @@ def test_overpass_queries_and_bboxes():
     area_q = osm.overpass_area_query(boxes)
     assert area_q.count('way["highway"]') == 4 and area_q.count('node["natural"="tree"]') == 4
     assert area_q.endswith("out tags geom;")
-    assert osm.split_street_city("Marktgasse, Winterthur") == ("Marktgasse", "Winterthur")
-    with pytest.raises(StreetNotFound):
-        osm.split_street_city("Marktgasse")
 
 
 def test_cache_ttl(monkeypatch):
@@ -279,7 +284,7 @@ def test_serialize_street_output_shape(langstrasse):
     round_trip = StreetResponse.model_validate_json(resp.model_dump_json())
     assert round_trip.street_id == ctx.street_id and round_trip.city == "zurich"
     assert set(resp.layers) == {"axis", "carriageway", "sidewalks", "plantable", "buildings", "cycleways",
-                                "junctions", "existing_trees", "corridor"}
+                                "parking", "junctions", "existing_trees", "corridor"}
     assert resp.layers["axis"].features[0]["properties"] == {"name": "Langstrasse", "length_m": resp.length_m}
     assert resp.layers["carriageway"].features[0]["properties"] == {"layer": "carriageway"}
     assert len(resp.layers["buildings"].features) == resp.stats.buildings
@@ -302,16 +307,14 @@ def test_serialize_street_output_shape(langstrasse):
 
 # ----------------------------------------------------------------------------- registry
 def test_registry_and_city_infos():
-    assert list(ADAPTERS) == ["zurich", "berlin", "osm", "demo"]
+    assert list(ADAPTERS) == ["zurich", "demo"]
     for city_id, adapter in ADAPTERS.items():
         assert isinstance(adapter, CityAdapter)
         assert isinstance(adapter.info, CityInfo) and adapter.info.id == city_id
         assert sum(1 for b in adapter.info.basemaps if b.default) == 1
         assert adapter.info.utc_offset_hours == 2.0
-    assert get_adapter("berlin").info.epsg == 25833 and get_adapter("zurich").info.epsg == 2056
-    assert get_adapter("osm").info.name == "Anywhere (OpenStreetMap)"
-    assert get_adapter("osm").info.demo_streets == ["Rue de Rivoli, Paris", "Karl-Marx-Allee, Berlin", "Marktgasse, Winterthur"]
-    assert zurich.ZURICH_INFO.demo_streets[0] == "Langstrasse" and berlin.BERLIN_INFO.demo_streets[0] == "Rigaer Straße"
+    assert get_adapter("zurich").info.epsg == 2056
+    assert zurich.ZURICH_INFO.demo_streets[0] == "Langstrasse"
     with pytest.raises(KeyError):
         get_adapter("atlantis")
 
@@ -332,13 +335,6 @@ async def test_demo_adapter_offline():
     serialize_street(ctx)
 
 
-async def test_osm_adapter_requires_street_comma():
-    with pytest.raises(StreetNotFound):
-        await get_adapter("osm").find_street("Langstrasse")
-    with pytest.raises(StreetNotFound):
-        await get_adapter("osm").street_from_line([(8.5, 47.3)])
-
-
 # ----------------------------------------------------------------------------- network
 @network
 async def test_network_zurich_langstrasse():
@@ -354,34 +350,6 @@ async def test_network_zurich_langstrasse():
     assert resp.stats.existing_trees > 0
     assert zurich.TREE_FALLBACK_WARNING in resp.warnings or resp.layer_basis["existing_trees"] == "measured"
     assert resp.layer_sources["carriageway"] == zurich.CADASTRE_ATTRIBUTION
-
-
-@network
-async def test_network_berlin_rigaer_strasse():
-    ctx = await get_adapter("berlin").find_street("Rigaer Straße")
-    resp = serialize_street(ctx)
-    print(f"\nberlin Rigaer Straße: length={resp.length_m} trees={resp.stats.existing_trees} "
-          f"imputed={resp.stats.existing_trees_crown_imputed} buildings={resp.stats.buildings} "
-          f"junctions={resp.stats.junctions} warnings={resp.warnings}")
-    assert 1000 < resp.length_m <= 2500
-    assert resp.stats.existing_trees > 50 and resp.layer_basis["existing_trees"] == "measured"
-    assert {t.source for t in ctx.existing_trees} >= {"street"}
-    assert resp.stats.buildings > 20 and resp.stats.junctions >= 5
-    assert resp.layer_basis["carriageway"] == "estimated"
-    assert resp.name == "Rigaer Straße"
-
-
-@network
-async def test_network_osm_marktgasse_winterthur():
-    ctx = await get_adapter("osm").find_street("Marktgasse, Winterthur")
-    resp = serialize_street(ctx)
-    print(f"\nosm Marktgasse, Winterthur: length={resp.length_m} trees={resp.stats.existing_trees} "
-          f"buildings={resp.stats.buildings} junctions={resp.stats.junctions} epsg={resp.epsg} warnings={resp.warnings}")
-    assert resp.epsg == 32632 and ctx.city.epsg == 32632
-    assert 250 < resp.length_m < 500
-    assert resp.stats.carriageway_m2 == 0.0          # pedestrian street: no carriageway
-    assert resp.stats.plantable_m2 > 500 and resp.stats.buildings > 5
-    assert 8.72 < ctx.city.center[0] < 8.74 and 47.49 < ctx.city.center[1] < 47.51
 
 
 def test_mapped_foot_crossing_is_a_junction_but_overpass_is_not():
