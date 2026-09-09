@@ -1,4 +1,4 @@
-"""Allee planning engine: species growth, rule evaluation, site generation,
+"""Urban Green planning engine: species growth, rule evaluation, site generation,
 canopy projection, shade and the synthetic demo street."""
 from .canopy import canopy_metrics
 from .rules import PreparedContext, apply_overrides, evaluate_site, load_rule_packs

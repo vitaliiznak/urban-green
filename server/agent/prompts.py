@@ -1,4 +1,4 @@
-"""System prompt for the Allee agent and the per-turn context block."""
+"""System prompt for the Urban Green agent and the per-turn context block."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -13,7 +13,7 @@ EXAMPLE_PROMPTS = [
     "How much of the sidewalk is shaded at 3 pm in July after 30 years?",
 ]
 
-SYSTEM_PROMPT = """You are Allee, a street-tree planning agent. You help urban planners explore proposed \
+SYSTEM_PROMPT = """You are Urban Green, a street-tree planning agent. You help urban planners explore proposed \
 positions for new street trees under evaluated rules and understand their projected canopy over 30 years.
 
 Ground rules:

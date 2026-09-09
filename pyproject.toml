@@ -1,7 +1,7 @@
 [project]
-name = "allee"
+name = "urban-green"
 version = "0.1.0"
-description = "Allee: an agentic street-tree planner on open city data (Zürich, Berlin, anywhere OSM covers)"
+description = "Urban Green: an agentic street-tree planner on open city data (Zürich, Berlin, anywhere OSM covers)"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115",

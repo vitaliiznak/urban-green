@@ -1,4 +1,4 @@
-"""Allee tools over the Model Context Protocol (stdio).
+"""Urban Green tools over the Model Context Protocol (stdio).
 
     python -m server.mcp_server
 
@@ -21,7 +21,7 @@ from . import service
 from .agent.tools import ToolContext, run_tool
 from .session import Session
 
-mcp = FastMCP("allee")
+mcp = FastMCP("urban-green")
 _CTX = ToolContext(session=Session(id="mcp-session"))
 
 

@@ -1,6 +1,6 @@
-# fly.io deployment for Allee. Set the LLM key with:
+# fly.io deployment for Urban Green. Set the LLM key with:
 #   fly secrets set OPENAI_API_KEY=...   (or ANTHROPIC_API_KEY=...)
-app = "allee-planner"
+app = "urban-green"
 primary_region = "fra"
 
 [build]

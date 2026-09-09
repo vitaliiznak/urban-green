@@ -1,8 +1,8 @@
-# Allee
+# Urban Green
 
 **Name a street. Explore proposed tree positions under a cited rule pack and estimate their canopy over 30 years.**
 
-Allee is an agentic street-tree planner built as an overnight MVP for the goNEON
+Urban Green is an agentic street-tree planner built as an overnight MVP for the goNEON
 "Platform & Ecosystem Owner" exercise. A planner picks a city and a street (or draws one),
 the engine proposes tree positions at a chosen spacing, checks each one against a planting
 standard whose every distance carries its source, and projects crown growth, canopy cover
@@ -165,7 +165,7 @@ together. Rate limits per session and per day are set with `AGENT_TURNS_PER_HOUR
 The same tools for Claude Desktop, Claude Code or any MCP client:
 
 ```json
-{ "mcpServers": { "allee": { "command": "/path/to/.venv/bin/python", "args": ["-m", "server.mcp_server"], "cwd": "/path/to/allee" } } } }
+{ "mcpServers": { "urban-green": { "command": "/path/to/.venv/bin/python", "args": ["-m", "server.mcp_server"], "cwd": "/path/to/urban-green" } } } }
 ```
 
 Tools: `load_street`, `plan_trees`, `inspect_plan`, `explain_site`, `set_rule`, `canopy_projection`, `shade`,
@@ -174,12 +174,12 @@ Tools: `load_street`, `plan_trees`, `inspect_plan`, `explain_site`, `set_rule`, 
 ## Deploy (Fly.io, one container)
 
 ```bash
-fly launch --no-deploy --copy-config --name allee-planner   # uses fly.toml
+fly launch --no-deploy --copy-config --name urban-green   # uses fly.toml
 fly secrets set OPENAI_API_KEY=...                            # or ANTHROPIC_API_KEY
 fly deploy
 ```
 
-Any Docker host works: `docker build -t allee . && docker run -p 8000:8000 --env-file .env allee`.
+Any Docker host works: `docker build -t urban-green . && docker run -p 8000:8000 --env-file .env urban-green`.
 Keys stay server-side; the browser never sees them. One shared-CPU machine handles a
 hackathon room: planning a 1.3 km street takes well under a second and upstream responses
 are cached for 15 minutes.

@@ -1,6 +1,6 @@
-# Allee — build contract
+# Urban Green — build contract
 
-Allee is an agentic street-tree planner: a planner names a street (or draws one), the
+Urban Green is an agentic street-tree planner: a planner names a street (or draws one), the
 engine proposes every legal tree position under a cited rule pack, projects the canopy
 those trees will cast over 30 years, and a chat agent drives the same tools and explains
 the result. Runs in one container, works without an LLM key (plan panel + HTTP API),
@@ -95,7 +95,7 @@ Data sources verified live on 2026-09-07/08 (fixtures of real responses in `test
   `[out:json][timeout:25]; ( way["highway"](bbox); way["building"](bbox);
   node["natural"="tree"](bbox); ); out tags geom;` — `geom` gives coordinates inline.
   Add a fallback mirror `https://overpass.kumi.systems/api/interpreter`.
-  User-Agent header on every request: `allee/0.1 (street-tree planning demo)`.
+  User-Agent header on every request: `urban-green/0.1 (street-tree planning demo)`.
 - Nominatim: `https://nominatim.openstreetmap.org/search?q=<street>, <city>&format=jsonv2
   &polygon_geojson=1&limit=10` -> pick results with `osm_type=way` and `class=highway`.
   Then Overpass: all `way["highway"]["name"="<name>"]` inside the city bbox (use the
@@ -347,20 +347,20 @@ else `ANTHROPIC_API_KEY` -> Anthropic, else agent disabled (`/api/agent` -> 503 
 `async def run_turn(system, history, tools, on_event) -> new_history_items` so `loop.py`
 is provider-agnostic.
 
-`agent/prompts.py`: system prompt: you are Allee, a street-tree planning agent; you
+`agent/prompts.py`: system prompt: you are Urban Green, a street-tree planning agent; you
 never estimate distances yourself, every number comes from a tool; explain verdicts by
 rule with its source; must vs should; keep answers under 120 words unless asked; after
 planning, mention canopy at 30 years and the top failing rule; suggest one next step.
 Include the active city, street, scenarios and rule overrides as context each turn.
 
-`mcp_server.py`: `FastMCP("allee")` exposing load_street, plan_trees, explain_site,
+`mcp_server.py`: `FastMCP("urban-green")` exposing load_street, plan_trees, explain_site,
 set_rule, canopy_projection, shade, compare_scenarios, export_geojson (returns GeoJSON
 string), list_species, list_rules — same handlers as the agent tools, stdio transport,
 `python -m server.mcp_server`.
 
 Deploy: `Dockerfile` (python:3.12-slim, copy pyproject + server + web + rules, `pip install .`,
 `CMD uvicorn server.app:app --host 0.0.0.0 --port ${PORT:-8000}`), `fly.toml` (app
-"allee-planner", region fra, 1 shared-cpu 512 MB, internal_port 8000, http_service
+"urban-green", region fra, 1 shared-cpu 512 MB, internal_port 8000, http_service
 force_https, auto_stop_machines off, min_machines_running 1), `.dockerignore`.
 `run.sh`: `.venv/bin/uvicorn server.app:app --reload --port ${PORT:-8000}`.
 
@@ -375,7 +375,7 @@ Files: `web/index.html`, `web/app.js`, `web/style.css`. MapLibre GL JS 4.7.1 fro
 the same path (`maplibre-gl.css`), Google Fonts: `Instrument Serif` (display),
 `IBM Plex Sans` (UI), `IBM Plex Mono` (numbers/stations). No framework.
 
-Page name: **Allee**. One committed dark theme (aerial imagery under dark chrome), painted
+Page name: **Urban Green**. One committed dark theme (aerial imagery under dark chrome), painted
 explicitly: ground `#0F1512`, panel `#17201B` (92 % alpha over the map), line `#2A3630`,
 ink `#E8EDE6`, muted `#9AA89E`, accent (canopy) `#7FD069`, mature crown fill `#2F8F4E`,
 valid `#58C97A`, conditional `#F2B84B`, invalid `#F0574F`, shade `#7C9CFF` at 35 %,
@@ -384,7 +384,7 @@ site markers also carry a ring (valid solid, conditional dashed, invalid crossed
 legend names them.
 
 Layout (desktop first, works at 1280×800; below 900 px the panels stack under the map):
-- Map full-bleed. Top-left floating header: wordmark "Allee" (Instrument Serif) +
+- Map full-bleed. Top-left floating header: wordmark "Urban Green" (Instrument Serif) +
   subtitle "street-tree planning agent", city select, street search input with
   demo-street chips, "Draw street" button (click points on the map, double-click to finish,
   uses `POST /api/street` with `line`).

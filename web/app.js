@@ -1,4 +1,4 @@
-/* Allee — single-page MapLibre client for the FastAPI backend under /api.
+/* Urban Green — single-page MapLibre client for the FastAPI backend under /api.
    No framework, no build step. Sections: constants & state, HTTP, formatting,
    DOM helpers, status strip, map (layers, scale, popups, drawing), streets,
    plans & scenarios, year dock & shade, rules, agent chat (SSE), boot. */
@@ -1847,7 +1847,7 @@
     }
     renderSpeciesHint();
     renderAgent(cfg.agent);
-    document.title = `Allee · street-tree planning agent${cfg.version ? ` · v${cfg.version}` : ''}`;
+    document.title = `Urban Green · street-tree planning agent${cfg.version ? ` · v${cfg.version}` : ''}`;
   }
 
   function wireUi() {
@@ -1968,7 +1968,7 @@
     try {
       cfg = await api('/api/config');
     } catch (err) {
-      setError(`Cannot reach the Allee API: ${err.message}`);
+      setError(`Cannot reach the Urban Green API: ${err.message}`);
       return;
     }
     state.config = cfg;
@@ -1985,6 +1985,6 @@
     setYear(MAX_YEAR);
   }
 
-  window.allee = { map, state };  // debugging / demo hooks (read-only use)
+  window.urbanGreen = { map, state };  // debugging / demo hooks (read-only use)
   boot();
 })();

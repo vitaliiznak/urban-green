@@ -37,7 +37,7 @@ TREES_ATTRIBUTION = "Baumkataster Stadt Zürich (OGD)"
 TREE_FALLBACK_WARNING = ("City tree cadastre unavailable, showing OpenStreetMap trees "
                          "(crown diameters imputed)")
 
-# Cadastre `art` (land-cover class) -> Allee layer role.
+# Cadastre `art` (land-cover class) -> Urban Green layer role.
 LANDCOVER_CLASSES: dict[str, str] = {
     "Gebäude": "building",
     "Strasse, Weg": "carriageway",

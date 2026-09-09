@@ -2,7 +2,7 @@
 
 Three responsibilities live here:
 
-* HTTP plumbing: one shared ``httpx.AsyncClient`` with the Allee User-Agent, a
+* HTTP plumbing: one shared ``httpx.AsyncClient`` with the Urban Green User-Agent, a
   15-minute in-process response cache keyed by URL + parameters, Overpass with a
   mirror fallback, and Nominatim search.
 * Street resolution: Nominatim picks the street, Overpass fetches every way with
@@ -40,7 +40,7 @@ from .. import crs
 from ..schemas import Basemap, Basis, CityInfo
 from .base import CityAdapter, ExistingTree, StreetContext, StreetNotFound, UpstreamUnavailable
 
-USER_AGENT = "allee/0.1 (street-tree planning demo)"
+USER_AGENT = "urban-green/0.1 (street-tree planning demo)"
 OVERPASS_URLS = ("https://maps.mail.ru/osm/tools/overpass/api/interpreter",   # fastest public mirror in probes (0.8 s)
                  "https://overpass-api.de/api/interpreter",
                  "https://overpass.private.coffee/api/interpreter",
@@ -177,7 +177,7 @@ def cache_clear() -> None:
 
 
 def get_client() -> httpx.AsyncClient:
-    """Shared async client (30 s timeout, Allee User-Agent), re-created per event loop."""
+    """Shared async client (30 s timeout, Urban Green User-Agent), re-created per event loop."""
     global _client, _client_loop
     loop = asyncio.get_running_loop()
     if _client is None or _client.is_closed or _client_loop is not loop:

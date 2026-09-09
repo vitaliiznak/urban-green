@@ -4,7 +4,7 @@ Record with the app open on the Zürich default street, aerial basemap, year sli
 
 ## Part 1 — to Lukas / engineering (≈3 min): what it does and how it is built
 
-1. **One sentence.** "Allee is an agentic street-tree planner: name a street, get every legal
+1. **One sentence.** "Urban Green is an agentic street-tree planner: name a street, get every legal
    tree position under a cited rule pack, and the canopy those trees cast in 30 years."
 2. **Scope cut, and why.** Above-ground only, one engine (2D clearances + canopy + one sun
    position), three verified rules, three city adapters. Cut: shade for every hour, species
@@ -45,9 +45,9 @@ Record with the app open on the Zürich default street, aerial basemap, year sli
 - **Engines compose.** The same site list can be checked against a second rule pack
   (overhead lines, sight triangles at junctions, loading zones) — the N! pattern of layered
   constraints. Next engine candidates: SNMan road-space reallocation as the upstream that
-  produces the street cross-section Allee plants into.
+  produces the street cross-section Urban Green plants into.
 - **Ecosystem surface.** HTTP + SSE + MCP today; the tool schemas are the API. A partner can
-  drive Allee from their own agent, or a planner from Claude Desktop, without touching the UI.
+  drive Urban Green from their own agent, or a planner from Claude Desktop, without touching the UI.
 - **What a team does in week one.** Harden the adapters (retry, caching to disk), add a
   species table with climate suitability per city, run the Berlin standard's remaining
   rules (pit size, root space), and put the rule editor behind a login so packs are shared.

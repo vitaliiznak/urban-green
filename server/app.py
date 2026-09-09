@@ -1,4 +1,4 @@
-"""Allee HTTP API and static front-end (FastAPI).
+"""Urban Green HTTP API and static front-end (FastAPI).
 
 Everything JSON lives under /api; errors use one envelope
 `{"error": {"message": ..., "code": ...}}`; the single-page app in `web/`
@@ -53,7 +53,7 @@ log = logging.getLogger("canopy")
 WEB_DIR = ROOT / "web"
 
 app = FastAPI(
-    title="Allee",
+    title="Urban Green",
     version=service.VERSION,
     description="Agentic street-tree planner: every legal tree position under a cited rule pack, "
                 "30-year canopy projection, shade, and an agent that drives the same tools.",

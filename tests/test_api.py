@@ -244,7 +244,7 @@ class FakeProvider:
     model = "fake-1"
 
     async def run_turn(self, system, history, tools, on_event):
-        assert "Allee" in system and "Current context" in system
+        assert "Urban Green" in system and "Current context" in system
         assert history[-1] == {"role": "user", "content": "plan it"}
         assert {t.name for t in tools} >= {"load_street", "plan_trees", "fly_to"}
         await on_event("text", {"delta": "Loading "})

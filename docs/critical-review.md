@@ -1,6 +1,6 @@
 # Critical review — 6 September 2026
 
-Three independent agents reviewed the running Allee app: one used Browser for
+Three independent agents reviewed the running Urban Green app: one used Browser for
 interactive workflow checks, one used Computer Use in Microsoft Edge for visual
 and accessibility review, and one traced client/server behavior in the code.
 Existing worktree changes were preserved. The updated app runs at

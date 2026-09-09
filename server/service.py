@@ -440,7 +440,7 @@ def export_geojson(scenario_id: str) -> dict[str, Any]:
             "species": resp.species.name_lat,
             "summary": resp.summary.model_dump(),
             "generated_at": now_iso(),
-            "generator": f"Allee {VERSION}",
+            "generator": f"Urban Green {VERSION}",
         },
     }
 

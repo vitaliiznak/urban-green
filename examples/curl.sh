@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Allee HTTP API walkthrough. Usage: BASE=http://localhost:8000 ./examples/curl.sh
+# Urban Green HTTP API walkthrough. Usage: BASE=http://localhost:8000 ./examples/curl.sh
 set -euo pipefail
 BASE="${BASE:-http://localhost:8000}"
 SID="example-$(date +%s)"
