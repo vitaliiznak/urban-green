@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
-<link rel="stylesheet" href="/static/style.css?v=parking-off">
+<link rel="stylesheet" href="/static/style.css?v=restrictions-ui">
 </head>
 <body>
 <header class="app-header">
@@ -26,7 +26,8 @@
   <header class="panel hdr" id="header">
     <p class="eyebrow">Street-tree planner</p>
     <h2 class="intro-title">Make room for more trees.</h2>
-    <p class="intro-copy">Choose a street, try different trees, and estimate the added shade and cooling.</p>
+    <p class="intro-copy">Choose a street, set how close trees may stand, then estimate shade and cooling.</p>
+    <p class="hint" id="restriction-preview"></p>
     <details id="street-picker" open>
     <summary class="step-title"><span class="step-number">1</span> Choose a street <span class="change-street">Change</span></summary>
     <div class="hdr-row">
@@ -62,9 +63,38 @@
   </header>
 
   <div class="col col-left" id="col-left">
+    <section class="panel card" id="rules-card" aria-labelledby="rules-title" hidden>
+      <header class="card-head">
+        <h2 class="card-title" id="rules-title"><span class="step-number">2</span> Planting restrictions</h2>
+        <span class="card-meta mono" id="rules-meta"></span>
+      </header>
+      <p class="hint">These limits decide whether a proposed tree is green, amber, or excluded. <strong>Required</strong> excludes a failing position. <strong>Recommended</strong> keeps it amber for review.</p>
+      <div class="restriction-summary" id="rules-summary" aria-label="Current restrictions"></div>
+      <p class="card-note" id="rules-source"></p>
+      <p class="hint is-pending-note" id="rules-pending" hidden></p>
+      <details class="restriction-editor" id="rules-editor" open>
+        <summary>Edit distances and required / recommended</summary>
+        <div id="rules">
+          <h3 class="restriction-group">Cited standard</h3>
+          <ul class="restriction-list" id="rules-standard"></ul>
+          <h3 class="restriction-group">Planning defaults</h3>
+          <p class="hint">Editable starting points for this tool, not part of the cited standard.</p>
+          <ul class="restriction-list" id="rules-defaults"></ul>
+        </div>
+      </details>
+      <details class="locked-rules" id="locked-rules-details">
+        <summary>Always applied · cannot be turned off</summary>
+        <ul class="locked-list" id="locked-rules"></ul>
+      </details>
+      <div class="card-foot">
+        <button class="btn btn-ghost btn-sm" id="rules-reset" type="button">Restore default restrictions</button>
+        <button class="btn btn-sm" id="goto-trees" type="button">Next: adjust the trees ↓</button>
+      </div>
+    </section>
+
     <section class="panel card" id="settings-card" aria-labelledby="plan-title" hidden>
       <header class="card-head">
-        <h2 class="card-title" id="plan-title"><span class="step-number">2</span> Adjust the trees</h2>
+        <h2 class="card-title" id="plan-title"><span class="step-number">3</span> Adjust the trees</h2>
 
       </header>
       <form id="plan-form" class="card-body">
@@ -119,7 +149,7 @@
     </section>
 
     <section class="panel card result-card" id="review-card" aria-labelledby="result-title" hidden>
-      <header class="card-head"><h2 class="card-title" id="result-title"><span class="step-number">3</span> Review your plan</h2></header>
+      <header class="card-head"><h2 class="card-title" id="result-title"><span class="step-number">4</span> Review your plan</h2></header>
       <p id="result-empty" class="hint">Your proposed trees and estimated tree cover will appear here.</p>
       <div id="result-content" hidden>
         <p id="result-name" class="result-name"></p>
@@ -131,6 +161,7 @@
         <button type="button" class="btn btn-block" id="go-temperature">Compare temperature with current trees ↓</button>
         <div id="plan-meta" class="verdict-summary"></div>
         <p id="plan-rule-basis" class="scope-note"></p>
+        <button type="button" class="btn btn-block" id="edit-restrictions">Edit planting restrictions ↑</button>
         <details id="review-checks"><summary>Why are positions flagged?</summary><div id="review-reasons" class="review-reasons"></div></details>
         <p id="result-guidance" class="hint"></p>
         <button type="button" class="btn btn-block" id="view-plan">Show this plan on the map</button>
@@ -139,7 +170,7 @@
     </section>
 
     <details class="panel card temperature-card disclosure" id="temperature-card" hidden>
-      <summary class="card-head"><h2 class="card-title" id="temperature-title"><span class="step-number">4</span> Compare temperatures</h2></summary>
+      <summary class="card-head"><h2 class="card-title" id="temperature-title"><span class="step-number">5</span> Compare temperatures</h2></summary>
       <p class="hint">Compare the current trees with your proposed plan under the same summer weather.</p>
       <p class="temperature-notice">Exploratory air-temperature estimate. Not validated for this street.</p>
       <form id="temperature-form" class="card-body">
@@ -193,19 +224,6 @@
         <a class="btn btn-sm btn-ghost" id="export-link" href="#" download aria-disabled="true">Download map data</a>
       </div>
     </section>
-    <details class="panel card disclosure" id="rules-details" hidden>
-      <summary class="card-head">
-        <h2 class="card-title" id="rules-title">Planting rules</h2>
-        <span class="card-meta mono" id="rules-meta"></span>
-      </summary>
-      <p class="hint">“Must” excludes a failing position; “should” keeps it amber for review. Editing a rule recalculates the current plan. Existing trunk positions, mapped parking bays and the minimum 10 m junction exclusion always apply, even when editable rules are disabled.</p>
-      <p class="card-note" id="rules-source"></p>
-      <ul class="rules" id="rules"></ul>
-      <div class="card-foot">
-        <button class="btn btn-ghost btn-sm" id="rules-reset" type="button">Restore default rules</button>
-      </div>
-    </details>
-
   </div>
 
 </div>
@@ -369,6 +387,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
-<script src="/static/app.js?v=parking-off"></script>
+<script src="/static/app.js?v=restrictions-ui"></script>
 </body>
 </html>

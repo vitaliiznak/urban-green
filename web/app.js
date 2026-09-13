@@ -90,7 +90,9 @@
   function collectUi() {
     const ids = ['map', 'header', 'city', 'search-form', 'search', 'search-btn', 'draw', 'demo-chips', 'street-meta',
       'status', 'col-left', 'plan-form', 'plan-meta', 'spacing', 'spacing-out', 'species', 'species-hint', 'label',
-      'plan-btn', 'rules-meta', 'rules-source', 'rules', 'rules-reset', 'scenarios', 'scenarios-meta', 'compare-btn',
+      'plan-btn', 'rules-card', 'rules-meta', 'rules-source', 'rules', 'rules-standard', 'rules-defaults', 'rules-summary',
+      'rules-reset', 'rules-pending', 'restriction-preview', 'locked-rules', 'goto-trees', 'edit-restrictions',
+      'scenarios', 'scenarios-meta', 'compare-btn',
       'export-link', 'basemaps', 'play', 'year', 'readout', 'shade', 'shade-info', 'agent', 'agent-meta', 'messages',
       'agent-offline', 'prompt-chips', 'chat-form', 'chat-input', 'send', 'agent-foot', 'compare-modal',
       'compare-close', 'compare-note', 'compare-table', 'workflow-status', 'data-status', 'data-summary',
@@ -1130,19 +1132,29 @@
       }
     }
     if (reasons.size) $('review-reasons').replaceChildren(
-      el('p', { class: 'hint', text: 'Select a reason to inspect a position. Amber positions remain proposed; red positions are excluded. A position can have more than one conflict.' }),
-      ...Array.from(reasons.values()).sort((a, b) => b.count - a.count).map((reason) => el('button', {
-        type: 'button', class: 'review-reason',
-        onclick: () => {
-          ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
-          focusSite(reason.siteId);
-        },
-      }, [
-        el('strong', { text: ruleRequirement(reason.rule)[0] }),
-        el('span', { text: ruleRequirement(reason.rule)[1] }),
-        el('span', { class: 'hint', text: requirementSource(reason.rule, definitions.get(reason.rule.rule_id), pack) }),
-        el('span', { class: 'inspect-reason', text: `${reason.included} amber · ${reason.count - reason.included} excluded · Inspect an example →` }),
-      ])),
+      el('p', { class: 'hint', text: 'Amber positions remain proposed; red positions are excluded. A position can have more than one conflict.' }),
+      ...Array.from(reasons.values()).sort((a, b) => b.count - a.count).map((reason) => {
+        const editable = definitions.has(reason.rule.rule_id);
+        return el('article', { class: 'review-reason' }, [
+          el('strong', { text: ruleRequirement(reason.rule)[0] }),
+          el('span', { text: ruleRequirement(reason.rule)[1] }),
+          el('span', { class: 'hint', text: requirementSource(reason.rule, definitions.get(reason.rule.rule_id), pack) }),
+          el('span', { class: 'hint', text: `${reason.included} amber · ${reason.count - reason.included} excluded` }),
+          el('div', { class: 'review-reason-actions' }, [
+            el('button', {
+              type: 'button', class: 'btn btn-sm',
+              onclick: () => {
+                ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+                focusSite(reason.siteId);
+              },
+              text: 'Inspect an example',
+            }),
+            editable
+              ? el('button', { type: 'button', class: 'btn btn-sm btn-ghost', onclick: () => focusRestriction(reason.rule.rule_id), text: 'Change this limit' })
+              : null,
+          ]),
+        ]);
+      }),
     );
     ui.resultGuidance.textContent = s.planted === 0
       ? 'No proposed trees fit these settings. Try a smaller tree species or choose “Fit around obstacles” in More planting options.'
@@ -1157,7 +1169,8 @@
     $('review-card').hidden = !hasPlan;
     $('temperature-card').hidden = !hasPlan;
     $('plans-card').hidden = !state.scenarios.length;
-    $('rules-details').hidden = !state.street;
+    ui.rulesCard.hidden = !state.street;
+    if (ui.restrictionPreview) ui.restrictionPreview.hidden = Boolean(state.street);
     document.querySelector('.data-details').hidden = !state.street;
     ui.fitStreet.hidden = !state.street;
     $('back-to-plan').textContent = state.street ? 'Back to settings' : 'Back to street selection';
@@ -1189,6 +1202,14 @@
     ui.compareBtn.disabled = busy || streetScenarios().length < 2;
     ui.rules.inert = busy;
     ui.rulesReset.disabled = busy;
+    ui.gotoTrees.disabled = busy || !state.street;
+    ui.editRestrictions.disabled = busy || !state.street;
+    if (ui.rulesPending) {
+      ui.rulesPending.hidden = !rulesPending;
+      ui.rulesPending.textContent = rulesPending
+        ? 'These restrictions differ from the selected plan. Apply them in Adjust the trees to update the map.'
+        : '';
+    }
     ui.send.disabled = busy;
     for (const chip of ui.promptChips.children) chip.disabled = busy;
     for (const input of ui.planForm.querySelectorAll('input, select')) input.disabled = busy || !state.street;
@@ -1202,11 +1223,11 @@
       : state.updatingRules ? 'Updating the planting rules…'
       : state.agent.streaming ? 'The assistant is working on your request…'
       : state.status.error ? 'Could not complete this step. Try again or choose another example street.'
-      : rulesPending ? 'Rules changed. Apply rules to update the map.'
+      : rulesPending ? 'Restrictions changed. Apply them to update the map.'
       : state.dirty ? 'Settings changed. Apply changes to update the map.'
-      : activeScenario() ? 'Plan ready. Adjust the trees or review your result below.'
-      : state.street ? 'Street ready. Create a plan to see possible tree positions.' : 'Choose a street to start.';
-    ui.planHint.textContent = rulesPending ? 'Planting rules changed since this plan. Apply them to update its checks and map.'
+      : activeScenario() ? 'Plan ready. Edit restrictions, adjust the trees, or review your result.'
+      : state.street ? 'Street ready. Review the planting restrictions, then create a plan.' : 'Choose a street to start.';
+    ui.planHint.textContent = rulesPending ? 'Planting restrictions changed since this plan. Apply them to update its checks and map.'
       : state.dirty ? 'The map still shows your previous plan. Apply your changes below.'
       : hasPlan ? 'Change a setting to create an alternative. Your previous plan stays available for comparison.'
       : 'Create a plan to check planting positions and estimate tree cover.';
@@ -1479,6 +1500,36 @@
   }
 
   // ------------------------------------------------------------ rules
+  const RESTRICTION_SHORT = {
+    carriageway_edge: 'Road',
+    cycleway: 'Cycle path',
+    building_crown: 'Buildings',
+    plantable_surface: 'Plantable surface',
+    existing_tree: 'Existing trees',
+    junction: 'Junctions',
+    sidewalk_passage: 'Sidewalk width',
+  };
+  const LOCKED_RESTRICTIONS = [
+    {
+      id: 'junction_exclusion',
+      short: 'Junctions 10 m',
+      title: '10 m from mapped junctions and crossings',
+      copy: 'Closer positions are excluded, measured along the street or to the trunk. Conservative planning default, not a surveyed sight triangle.',
+    },
+    {
+      id: 'parking_exclusion',
+      short: 'Parking',
+      title: 'Not on mapped parking',
+      copy: 'A new tree cannot stand on a mapped parking bay or paved parking surface.',
+    },
+    {
+      id: 'occupied_tree_position',
+      short: 'Existing trunk',
+      title: 'Not on an existing trunk',
+      copy: 'A new tree cannot use the same mapped position as an existing tree.',
+    },
+  ];
+
   /** Copy a pack with session overrides applied client-side (harmless if the server already did). */
   function withOverrides(pack, overrides) {
     if (!overrides || !Object.keys(overrides).length) return pack;
@@ -1503,53 +1554,169 @@
     renderRules();
   }
 
+  function restrictionStrength(mode) {
+    return mode === 'must' ? 'Required' : 'Recommended';
+  }
+
+  function restrictionCopy(rule) {
+    const distance = rule.min_distance_m != null ? `${fmt.num(rule.min_distance_m, 2)} m` : null;
+    const text = {
+      carriageway_edge: `Keep the trunk at least ${distance} from the road edge.`,
+      cycleway: `Keep the trunk at least ${distance} from a cycle path.`,
+      building_crown: `Keep the mature crown at least ${distance} from a building.`,
+      existing_tree: `Keep the new trunk at least ${distance} from an existing tree.`,
+      junction: `Recommended clearance from a junction. The 10 m exclusion below always applies as well.`,
+      sidewalk_passage: `Leave at least ${distance} of sidewalk beside the tree pit.`,
+      plantable_surface: 'Place the trunk on a sidewalk or verge, not on the road, parking or a building.',
+    }[rule.id];
+    return text || rule.description || (distance ? `${rule.label}: at least ${distance}.` : rule.label);
+  }
+
+  function restrictionChip(rule) {
+    const name = RESTRICTION_SHORT[rule.id] || rule.label;
+    const value = !rule.enabled ? 'off'
+      : rule.min_distance_m != null ? `${fmt.num(rule.min_distance_m, 2)} m · ${restrictionStrength(rule.mode).toLowerCase()}`
+      : restrictionStrength(rule.mode).toLowerCase();
+    return el('span', { class: `restriction-chip ${rule.enabled ? rule.mode : 'off'}` }, [
+      el('span', { class: 'chip-mark', 'aria-hidden': 'true' }),
+      el('button', { type: 'button', onclick: () => focusRestriction(rule.id), text: `${name} · ${value}` }),
+    ]);
+  }
+
+  function lockedChip(item) {
+    return el('span', { class: 'restriction-chip locked' }, [
+      el('span', { class: 'chip-mark', 'aria-hidden': 'true' }),
+      el('button', {
+        type: 'button',
+        onclick: () => {
+          $('locked-rules-details').open = true;
+          focusRestriction(item.id);
+        },
+        text: `${item.short} · always on`,
+      }),
+    ]);
+  }
+
+  function packPreview(pack) {
+    const road = pack.rules.find((r) => r.id === 'carriageway_edge');
+    const roadBit = road && road.enabled
+      ? `${fmt.num(road.min_distance_m, 2)} m from the road (${restrictionStrength(road.mode).toLowerCase()})`
+      : null;
+    return `Default checks include ${[roadBit, '10 m from mapped junctions (always excluded)'].filter(Boolean).join(' and ')}. You can edit the limits after you choose a street.`;
+  }
+
+  function clearRestrictionFocus() {
+    for (const node of document.querySelectorAll('.restriction.is-focused, .locked-item.is-focused')) {
+      node.classList.remove('is-focused');
+    }
+  }
+
+  function focusRestriction(ruleId) {
+    ui.rulesCard.hidden = false;
+    if ($('rules-editor')) $('rules-editor').open = true;
+    if (LOCKED_RESTRICTIONS.some((item) => item.id === ruleId)) $('locked-rules-details').open = true;
+    const row = $(`restriction-${ruleId}`);
+    const target = row || ui.rulesCard;
+    target.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+    clearRestrictionFocus();
+    if (row) {
+      row.classList.add('is-focused');
+      const input = row.querySelector('input[type="number"], input:not([disabled])');
+      if (input) input.focus({ preventScroll: true });
+      window.setTimeout(clearRestrictionFocus, 1600);
+    }
+  }
+
   function renderRules() {
     const pack = state.pack;
-    if (!pack) { ui.rules.replaceChildren(); ui.rulesMeta.textContent = ''; ui.rulesSource.textContent = ''; return; }
+    if (!pack) {
+      ui.rulesStandard.replaceChildren();
+      ui.rulesDefaults.replaceChildren();
+      ui.rulesSummary.replaceChildren();
+      ui.lockedRules.replaceChildren();
+      ui.rulesMeta.textContent = '';
+      ui.rulesSource.textContent = '';
+      ui.restrictionPreview.textContent = '';
+      return;
+    }
     const active = pack.rules.filter((r) => r.enabled).length;
-    ui.rulesMeta.textContent = `${active}/${pack.rules.length} active`;
+    const edited = pack.rules.filter((r) => r.overridden).length;
+    ui.rulesMeta.textContent = edited ? `${active}/${pack.rules.length} on · ${edited} edited` : `${active}/${pack.rules.length} on`;
     const src = pack.source || {};
     ui.rulesSource.replaceChildren(
       src.url ? el('a', { href: src.url, target: '_blank', rel: 'noopener', text: pack.name }) : el('span', { text: pack.name }),
       document.createTextNode(src.publisher ? ` · ${src.publisher}` : ''),
     );
-    ui.rules.replaceChildren(...pack.rules.map((r) => ruleRow(r, pack)));
+    ui.rulesSummary.replaceChildren(
+      ...pack.rules.map((r) => restrictionChip(r)),
+      ...LOCKED_RESTRICTIONS.map((item) => lockedChip(item)),
+    );
+    ui.rulesStandard.replaceChildren(...pack.rules.filter((r) => !r.assumption).map((r) => restrictionRow(r, pack)));
+    ui.rulesDefaults.replaceChildren(...pack.rules.filter((r) => r.assumption).map((r) => restrictionRow(r, pack)));
+    ui.lockedRules.replaceChildren(...LOCKED_RESTRICTIONS.map((item) => el('li', {
+      class: 'locked-item', id: `restriction-${item.id}`,
+    }, [
+      el('strong', { text: item.title }),
+      el('p', { class: 'restriction-copy', text: item.copy }),
+    ])));
+    ui.restrictionPreview.textContent = packPreview(pack);
+    ui.restrictionPreview.hidden = Boolean(state.street);
   }
 
-  function ruleRow(rule, pack) {
-    const other = rule.mode === 'must' ? 'should' : 'must';
-    const badge = el('button', {
-      type: 'button', class: `badge badge-${rule.mode}`, text: rule.mode,
-      title: `Click to make this rule ${other}`, 'aria-label': `${rule.mode}; click to make it ${other}`,
-      onclick: () => overrideRule(rule.id, { mode: other }),
-    });
-    const value = el('span', { class: 'rule-value' });
+  function restrictionRow(rule, pack) {
+    const distance = el('span', { class: 'restriction-distance' });
     if (rule.min_distance_m != null) {
-      const input = el('input', {
-        class: 'input', type: 'number', min: '0', max: '50', step: '0.05', value: String(rule.min_distance_m),
-        'aria-label': `${rule.label}, minimum distance in metres`, disabled: !rule.enabled,
-        onchange: (e) => {
-          const v = Number(e.target.value);
-          if (!Number.isFinite(v) || v < 0 || v > 50) { e.target.value = String(rule.min_distance_m); return; }
-          overrideRule(rule.id, { min_distance_m: v });
-        },
-      });
-      value.append(el('span', { text: '≥' }), input, el('span', { text: 'm' }));
+      distance.append(
+        el('span', { text: 'At least' }),
+        el('input', {
+          class: 'input', type: 'number', min: '0', max: '50', step: '0.05', value: String(rule.min_distance_m),
+          'aria-label': `${rule.label}, minimum distance in metres`, disabled: !rule.enabled,
+          onchange: (e) => {
+            const v = Number(e.target.value);
+            if (!Number.isFinite(v) || v < 0 || v > 50) { e.target.value = String(rule.min_distance_m); return; }
+            overrideRule(rule.id, { min_distance_m: v });
+          },
+        }),
+        el('span', { text: 'm' }),
+      );
     } else {
-      value.append(el('span', { class: 'tag', text: 'yes / no' }));
+      distance.append(el('span', { class: 'tag', text: 'Yes or no' }));
     }
-    const onOff = el('input', {
-      class: 'rule-on', type: 'checkbox', checked: rule.enabled, 'aria-label': `${rule.label} enabled`,
-      onchange: (e) => overrideRule(rule.id, { enabled: e.target.checked }),
-    });
-    const meta = el('span', { class: 'rule-meta' }, [
-      el('span', { text: ruleCitation(rule, pack) }),
-      rule.assumption && ruleCitation(rule, pack) !== 'planning default' ? el('span', { class: 'tag', text: 'planning default' }) : null,
-      rule.overridden ? el('span', { class: 'tag tag-edited', text: 'edited' }) : null,
+    const modeName = `restriction-mode-${rule.id}`;
+    const mode = el('div', { class: 'seg seg-sm', role: 'group', 'aria-label': `${rule.label} strength` }, [
+      el('label', { class: 'seg-item' }, [
+        el('input', {
+          type: 'radio', name: modeName, value: 'must', checked: rule.mode === 'must', disabled: !rule.enabled,
+          onchange: () => { if (rule.mode !== 'must') overrideRule(rule.id, { mode: 'must' }); },
+        }),
+        el('span', { text: 'Required' }),
+      ]),
+      el('label', { class: 'seg-item' }, [
+        el('input', {
+          type: 'radio', name: modeName, value: 'should', checked: rule.mode === 'should', disabled: !rule.enabled,
+          onchange: () => { if (rule.mode !== 'should') overrideRule(rule.id, { mode: 'should' }); },
+        }),
+        el('span', { text: 'Recommended' }),
+      ]),
     ]);
-    return el('li', { class: `rule${rule.enabled ? '' : ' off'}`, title: rule.quote || rule.description || '' }, [
-      el('div', { class: 'rule-main' }, [onOff, el('span', { class: 'rule-label', text: rule.label }), badge, value]),
-      meta,
+    return el('li', { class: `restriction${rule.enabled ? '' : ' off'}`, id: `restriction-${rule.id}` }, [
+      el('div', { class: 'restriction-head' }, [
+        el('span', { class: 'restriction-title', text: rule.label }),
+        el('label', { class: 'restriction-toggle' }, [
+          el('input', {
+            type: 'checkbox', checked: rule.enabled, 'aria-label': `Use ${rule.label}`,
+            onchange: (e) => overrideRule(rule.id, { enabled: e.target.checked }),
+          }),
+          el('span', { text: 'Use this check' }),
+        ]),
+      ]),
+      el('p', { class: 'restriction-copy', text: restrictionCopy(rule) }),
+      el('div', { class: 'restriction-controls' }, [distance, mode]),
+      el('div', { class: 'restriction-meta' }, [
+        el('span', { text: ruleCitation(rule, pack) }),
+        rule.assumption && ruleCitation(rule, pack) !== 'planning default' ? el('span', { class: 'tag', text: 'planning default' }) : null,
+        rule.overridden ? el('span', { class: 'tag tag-edited', text: 'edited' }) : null,
+      ]),
     ]);
   }
 
@@ -1925,10 +2092,15 @@
     $('finish-draw').addEventListener('click', finishDraw);
     $('cancel-draw').addEventListener('click', stopDraw);
     $('back-to-plan').addEventListener('click', () => {
-      const target = state.street ? ui.planForm : ui.header;
+      const target = state.street ? ui.rulesCard : ui.header;
       target.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
-      (state.street ? ui.spacing : ui.search).focus({ preventScroll: true });
+      (state.street ? ui.rulesCard.querySelector('input, button') : ui.search).focus({ preventScroll: true });
     });
+    ui.gotoTrees.addEventListener('click', () => {
+      $('settings-card').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
+      ui.spacing.focus({ preventScroll: true });
+    });
+    ui.editRestrictions.addEventListener('click', () => focusRestriction(state.pack && state.pack.rules[0] && state.pack.rules[0].id));
     ui.assistantToggle.addEventListener('click', () => toggleAssistant(ui.agent.hidden));
     ui.assistantClose.addEventListener('click', () => toggleAssistant(false));
     ui.fitStreet.addEventListener('click', () => fitToBbox(state.street && state.street.bbox));
