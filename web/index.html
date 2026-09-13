@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
-<link rel="stylesheet" href="/static/style.css?v=restrictions-ui">
+<link rel="stylesheet" href="/static/style.css?v=plan-delta">
 </head>
 <body>
 <header class="app-header">
@@ -26,7 +26,7 @@
   <header class="panel hdr" id="header">
     <p class="eyebrow">Street-tree planner</p>
     <h2 class="intro-title">Make room for more trees.</h2>
-    <p class="intro-copy">Choose a street, set how close trees may stand, then estimate shade and cooling.</p>
+    <p class="intro-copy">Choose a street to see how many trees fit, how much cover they add, and what still needs a site visit.</p>
     <p class="hint" id="restriction-preview"></p>
     <details id="street-picker" open>
     <summary class="step-title"><span class="step-number">1</span> Choose a street <span class="change-street">Change</span></summary>
@@ -153,18 +153,35 @@
       <p id="result-empty" class="hint">Your proposed trees and estimated tree cover will appear here.</p>
       <div id="result-content" hidden>
         <p id="result-name" class="result-name"></p>
+        <p id="result-reading" class="result-reading"></p>
+        <p id="result-vs" class="result-vs" hidden></p>
         <div class="result-metrics">
           <div><strong id="result-trees">–</strong><span>proposed trees</span></div>
-          <div><strong id="result-cover">–</strong><span>tree cover at 30 years</span></div>
+          <div>
+            <strong id="result-cover">–</strong>
+            <span>tree cover at 30 years</span>
+            <span class="result-baseline" id="result-cover-was"></span>
+          </div>
         </div>
-        <p class="hint">Tree cover is the share of the study area beneath existing and proposed crowns.</p>
-        <button type="button" class="btn btn-block" id="go-temperature">Compare temperature with current trees ↓</button>
+        <p class="hint" id="result-growth"></p>
+        <p class="hint" id="result-sidewalk"></p>
+        <div id="flag-summary" class="flag-summary" hidden></div>
         <div id="plan-meta" class="verdict-summary"></div>
         <p id="plan-rule-basis" class="scope-note"></p>
-        <button type="button" class="btn btn-block" id="edit-restrictions">Edit planting restrictions ↑</button>
         <details id="review-checks"><summary>Why are positions flagged?</summary><div id="review-reasons" class="review-reasons"></div></details>
+        <div id="try-alternatives" hidden>
+          <p class="field-label">Try a different plan</p>
+          <p class="hint">Creates another saved plan for this street so you can compare the trade-off.</p>
+          <div class="chips" id="plan-alternatives"></div>
+        </div>
         <p id="result-guidance" class="hint"></p>
-        <button type="button" class="btn btn-block" id="view-plan">Show this plan on the map</button>
+        <div class="result-actions">
+          <button type="button" class="btn btn-primary btn-block" id="compare-here" hidden>Compare with your other plans</button>
+          <button type="button" class="btn btn-block" id="go-temperature">Compare temperature and shade ↓</button>
+          <button type="button" class="btn btn-block" id="copy-brief">Copy a short briefing</button>
+          <button type="button" class="btn btn-block" id="view-plan">Show this plan on the map</button>
+          <button type="button" class="btn btn-ghost btn-block" id="edit-restrictions">Edit planting restrictions ↑</button>
+        </div>
         <p class="scope-note">Early planning estimate. Positions still need a site assessment, including underground utilities and root space.</p>
       </div>
     </section>
@@ -377,6 +394,7 @@
       </button>
     </header>
     <p class="card-note" id="compare-note">Figures at year 30. Click a row to show that scenario on the map.</p>
+    <p class="hint" id="compare-insight"></p>
     <p class="hint compare-scroll-hint">Scroll horizontally to see all comparison columns.</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Plan comparison"><table class="table" id="compare-table"></table></div>
     <details class="compare-details"><summary>Settings and additional canopy measures</summary>
@@ -387,6 +405,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
-<script src="/static/app.js?v=restrictions-ui"></script>
+<script src="/static/app.js?v=plan-delta"></script>
 </body>
 </html>

@@ -128,6 +128,35 @@ details[open] > summary.card-head::after { content: '−'; }
 .result-metrics > div { display: flex; flex-direction: column; gap: 4px; }
 .result-metrics strong { color: var(--accent); font: 400 34px/1.1 var(--font-display); }
 .result-metrics span { font-size: var(--fs-sm); color: var(--muted); }
+.result-reading { line-height: 1.55; }
+.result-vs {
+  padding: 10px 12px;
+  border-left: 2px solid var(--accent);
+  background: rgba(127, 208, 105, 0.08);
+  line-height: 1.5;
+}
+.result-baseline { font-size: 12px; color: var(--muted); }
+.flag-summary { display: flex; flex-direction: column; gap: 6px; }
+.flag-chip {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(242, 184, 75, 0.08);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.flag-chip:hover { border-color: var(--cond); }
+.result-actions { display: flex; flex-direction: column; gap: 8px; }
+#try-alternatives { display: flex; flex-direction: column; gap: 8px; }
+#plan-alternatives .chip { white-space: normal; text-align: left; line-height: 1.35; }
+.chip-recommend { border-color: var(--accent); color: var(--ink); background: rgba(127, 208, 105, 0.12); }
+#copy-brief[data-copied="true"] { border-color: var(--accent); color: var(--accent); }
 .verdict-summary { display: flex; flex-direction: column; gap: 5px; }
 .result-verdict { font-size: var(--fs-sm); }
 .result-verdict::before { content: '●'; margin-right: 7px; }
@@ -843,7 +872,7 @@ details[open] > summary.card-head::after { content: '−'; }
 .rule-line.recommendation-fail .mark { color: var(--cond); }
 .pop-head { flex-direction: column; gap: 4px; }
 .pop-explanation { line-height: 1.5; }
-.site-conflicts { margin: 4px 0; }
+.site-conflicts { margin: 4px 0; display: flex; flex-direction: column; gap: 8px; }
 .site-checks { margin: 5px 0; }
 .maplibregl-popup-content { max-height: min(500px, 65svh); overflow-y: auto; }
 @media (max-width: 900px) { .legend { top: auto; bottom: 220px; } }
