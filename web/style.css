@@ -1,4 +1,4 @@
-/* Urban Green — one committed dark theme: aerial imagery under dark chrome.
+/* Urban Green — a quiet dark workspace around the street map.
    Palette, type scale and spacing live in :root; app.js reads the colour
    tokens from here so the map layers and the chrome never drift apart. */
 
@@ -10,6 +10,9 @@
   --ink: #E8EDE6;
   --muted: #9AA89E;
   --accent: #7FD069;
+  --cooling-low: #8B9894;
+  --cooling-mid: #75CBC6;
+  --cooling-high: #27B6EA;
   --crown: #2F8F4E;
   --valid: #58C97A;
   --cond: #F2B84B;
@@ -95,12 +98,12 @@ button, input, select, output { font: inherit; color: inherit; }
 /* The planner scrolls independently; the map stays available beside it. */
 .app-header { height: 72px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .brand-divider { width: 1px; height: 22px; background: var(--line); margin: 0 10px; }
-.workspace { display: grid; grid-template-columns: 380px minmax(0, 1fr); height: calc(100dvh - 72px); }
-.west { overflow-y: auto; background: var(--ground); border-right: 1px solid var(--line); padding: 22px; }
+.workspace { display: grid; grid-template-columns: 390px minmax(0, 1fr); height: calc(100dvh - 72px); }
+.west { overflow-y: auto; background: var(--ground); border-right: 1px solid var(--line); padding: 24px; }
 .west .panel { background: transparent; box-shadow: none; backdrop-filter: none; border: 0; border-radius: 0; }
 .west .hdr { padding: 0 0 22px; }
-.col-left { display: flex; flex-direction: column; gap: 24px; }
-.col-left > .card { padding: 22px 0 0; border-top: 1px solid var(--line); }
+.col-left { display: flex; flex-direction: column; gap: 28px; }
+.col-left > .card { padding: 24px 0 0; border-top: 1px solid var(--line); }
 .map-workspace { position: relative; min-width: 0; }
 .map-toolbar { position: absolute; top: 20px; left: 20px; right: 20px; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; }
 .map-toolbar p:last-child { margin-top: 3px; }
@@ -113,20 +116,22 @@ button, input, select, output { font: inherit; color: inherit; }
 .step-title, .card-title { display: flex; align-items: center; gap: 9px; }
 .step-title { font-size: 17px; font-weight: 500; margin-bottom: 8px; }
 .step-number { width: 25px; height: 25px; display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%; border: 1px solid rgba(127,208,105,.35); color: var(--accent); font: 500 12px var(--font-ui); }
-.workflow-status { padding: 10px 12px; background: rgba(127,208,105,.08); border-left: 2px solid var(--accent); font-size: var(--fs-sm); color: var(--ink); }
+.workflow-status { padding: 6px 0; font-size: var(--fs-sm); color: var(--muted); }
 .workflow-status.is-pending { border-color: var(--cond); }
 summary { cursor: pointer; font-size: var(--fs-sm); color: var(--muted); }
 summary:hover { color: var(--ink); }
-summary.card-head::after { content: '+'; color: var(--accent); font: 20px var(--font-ui); }
+summary.card-head { list-style: none; }
+summary.card-head::-webkit-details-marker { display: none; }
+summary.card-head::after { content: '+'; margin-left: auto; color: var(--muted); font: 20px var(--font-ui); }
 details[open] > summary.card-head::after { content: '−'; }
 .details-body { display: flex; flex-direction: column; gap: 16px; padding-top: 14px; }
-.data-details > .status { margin-top: 10px; }
+.data-details > :not(summary) { margin-top: 12px; }
 .disclosure[open] > :not(summary) { margin-top: 14px; }
 .result-name { font-size: var(--fs-sm); color: var(--muted); overflow-wrap: anywhere; }
 #result-content { display: flex; flex-direction: column; gap: 14px; }
 .result-metrics { display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px; }
 .result-metrics > div { display: flex; flex-direction: column; gap: 4px; }
-.result-metrics strong { color: var(--accent); font: 400 34px/1.1 var(--font-display); }
+.result-metrics strong { color: var(--ink); font: 400 38px/1.1 var(--font-display); }
 .result-metrics span { font-size: var(--fs-sm); color: var(--muted); }
 .result-reading { line-height: 1.55; }
 .result-vs {
@@ -157,8 +162,8 @@ details[open] > summary.card-head::after { content: '−'; }
 #plan-alternatives .chip { white-space: normal; text-align: left; line-height: 1.35; }
 .chip-recommend { border-color: var(--accent); color: var(--ink); background: rgba(127, 208, 105, 0.12); }
 #copy-brief[data-copied="true"] { border-color: var(--accent); color: var(--accent); }
-.verdict-summary { display: flex; flex-direction: column; gap: 5px; }
-.result-verdict { font-size: var(--fs-sm); }
+.verdict-summary { display: flex; flex-wrap: wrap; gap: 5px 14px; }
+.result-verdict { font-size: 12px; }
 .result-verdict::before { content: '●'; margin-right: 7px; }
 .scope-note { color: var(--muted); font-size: 12px; line-height: 1.5; }
 
@@ -885,14 +890,53 @@ details[open] > summary.card-head::after { content: '−'; }
 .tree-evidence.has-warning { border-color: rgba(242,184,75,.5); }
 .tree-evidence.has-warning #existing-tree-source { color: var(--cond); }
 
-.temperature-notice { color: var(--cond); padding: 10px 12px; border-left: 2px solid var(--cond); background: rgba(242,184,75,.06); font-size: 13px; }
+.temperature-notice { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .temperature-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.temperature-values { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 14px 0; }
-.temperature-values > div { display: flex; flex-direction: column; gap: 8px; }
+.temperature-values { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(114, 189, 176, .18); }
+.temperature-values > div { display: flex; flex-direction: column; gap: 5px; }
+.temperature-values > div:last-child { text-align: right; }
 .temperature-values span { color: var(--muted); font-size: 12px; }
-.temperature-values strong { color: var(--accent); font: 32px/1.1 var(--font-display); }
-#temperature-result { display: flex; flex-direction: column; gap: 12px; }
-.temperature-delta { font-weight: 500; }
+.temperature-values strong { color: var(--ink); font: 400 25px/1.2 var(--font-ui); letter-spacing: -.04em; }
+.temperature-values .temperature-arrow { font-size: 20px; }
+#temperature-result { display: flex; flex-direction: column; gap: 16px; }
+.temperature-delta { color: #9FDFD4; font: 400 clamp(38px, 4vw, 52px)/1.1 var(--font-ui); letter-spacing: -.055em; overflow-wrap: anywhere; }
+.temperature-delta-label { color: #B0CAC3; margin-top: 4px; font-size: 13px; }
+.temperature-reading { padding: 20px; background: linear-gradient(140deg, rgba(114, 189, 176, .12), rgba(64, 127, 193, .045)); border: 1px solid rgba(114, 189, 176, .22); border-radius: 12px; }
+.temperature-reading h3 { margin-bottom: 16px; color: var(--ink); font-size: 14px; font-weight: 500; }
+.temperature-location-control { display: flex; flex-direction: column; gap: 7px; }
+.temperature-map-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.temperature-map-actions .btn-primary { flex: 1 1 180px; width: auto; }
+.temperature-map-actions > .btn-sm { min-height: 40px; }
+.temperature-shade-summary { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.temperature-card .field-label { letter-spacing: 0; text-transform: none; font-size: 12px; }
+.temperature-card .card-body { gap: 14px; }
+#temperature-settings > form { margin-top: 14px; }
+#temperature-status:empty { display: none; }
+.cooling-popup-value { color: var(--cooling-mid); font-size: 22px; }
+.temperature-inputs.details-body { display: grid; }
+.temperature-inputs .field { min-width: 0; }
+.input-unit { position: relative; }
+.input-unit .input { padding-right: 44px; }
+.input-unit > span { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--muted); }
+.field-help > .hint { margin-top: 8px; }
+.temperature-profile:empty { display: none; }
+.temperature-profile { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 5px 2px 8px; }
+.cooling-profile-row { display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 8px; }
+.cooling-profile-bars { position: relative; height: 58px; border-bottom: 1px solid var(--line); }
+.temperature-profile button { appearance: none; position: absolute; bottom: 3px; width: 3%; min-width: 4px; height: var(--cooling-height, 50%); min-height: 5px; padding: 0; border: 1px solid transparent; border-radius: 3px 3px 0 0; background: var(--cooling-color, var(--cooling-mid)); color: var(--ground); cursor: pointer; font-size: 11px; }
+.temperature-profile button::after { content: ''; position: absolute; inset: -4px 0; }
+.temperature-profile button:hover { filter: brightness(1.15); }
+.temperature-profile button[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 2px; }
+.cooling-profile-labels { padding-left: 40px; color: var(--muted); font-size: 11px; }
+.temperature-map-key { position: absolute; z-index: 3; bottom: 42px; left: 50%; transform: translateX(-50%); width: min(380px, calc(100% - 40px)); padding: 16px; }
+.temperature-map-key-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.temperature-map-key-head > p { font-size: 13px; font-weight: 500; }
+.temperature-map-key-head .btn { flex: none; }
+.temperature-color-scale { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--cooling-low), var(--cooling-mid) 50%, var(--cooling-high)); }
+.temperature-scale-labels { display: flex; justify-content: space-between; gap: 16px; margin-top: 5px; font-size: 12px; }
+.temperature-map-key > .hint { margin-top: 12px; font-size: 12px; }
+.is-cooling .legend { bottom: 190px; }
+.is-cooling #map .maplibregl-canvas { cursor: crosshair; }
 .temperature-method > :not(summary) { margin-top: 12px; }
 .temperature-method ul { padding-left: 18px; }
 .temperature-method li + li { margin-top: 8px; }
@@ -913,6 +957,11 @@ details[open] > summary.card-head::after { content: '−'; }
 @media (max-width: 700px) {
   #compare-table { min-width: 620px; }
   .compare-scroll-hint { display: block; }
+  .temperature-map-key { bottom: 38px; width: calc(100% - 24px); padding: 14px; }
+  .temperature-reading { padding: 20px; }
+  .temperature-delta { font-size: 48px; }
+  .temperature-values strong { font-size: 26px; }
+  .is-cooling .legend { bottom: 200px; }
 }
 
 #map.picking-street .maplibregl-canvas { cursor: crosshair !important; }

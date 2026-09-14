@@ -44,6 +44,7 @@
     ground: cssVar('--ground'), ink: cssVar('--ink'), muted: cssVar('--muted'), accent: cssVar('--accent'),
     crown: cssVar('--crown'), valid: cssVar('--valid'), cond: cssVar('--cond'), invalid: cssVar('--invalid'),
     shade: cssVar('--shade'), cycle: cssVar('--cycle'), existing: cssVar('--existing'),
+    coolingLow: cssVar('--cooling-low'), coolingMid: cssVar('--cooling-mid'), coolingHigh: cssVar('--cooling-high'),
   };
 
   /** "#RRGGBB" + alpha -> "rgba(r,g,b,a)". */
@@ -75,7 +76,8 @@
     draw: { active: false, points: [] },
     pickingStreet: false,
     agent: { streaming: false },
-    temperature: { seq: 0, pending: false, result: null },
+    temperature: { seq: 0, pending: false, result: null, selectedId: '', mapVisible: false, savedLayers: [] },
+    autoApply: { timer: 0, revision: 0, pending: false, running: false, failed: false, rules: {}, cooling: null },
     rulesEditorPinned: false,
     status: { sources: [], estimated: [], warnings: [], notes: [], error: null },
     hoverPopup: null,
@@ -398,7 +400,7 @@
   }
 
   function addSources() {
-    for (const id of [...LAYER_KEYS, 'sites', 'shade', 'draw']) {
+    for (const id of [...LAYER_KEYS, 'sites', 'shade', 'draw', 'temperature', 'temperature-selected']) {
       map.addSource(id, { type: 'geojson', data: emptyFc() });
     }
   }
@@ -479,6 +481,20 @@
       filter: ['==', ['geometry-type'], 'Point'],
       paint: { 'circle-radius': 4, 'circle-color': C.accent, 'circle-stroke-color': C.ground, 'circle-stroke-width': 1.5 },
     });
+    map.addLayer({
+      id: 'temperature-points', type: 'circle', source: 'temperature',
+      layout: { visibility: 'none' },
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 3, 17, 6, 19, 9],
+        'circle-color': ['interpolate', ['linear'], ['get', 'cooling_c'], 0, C.coolingLow, 0.25, C.coolingMid, 0.5, C.coolingHigh],
+        'circle-stroke-color': C.ground, 'circle-stroke-width': 1,
+      },
+    });
+    map.addLayer({
+      id: 'temperature-selected', type: 'circle', source: 'temperature-selected',
+      layout: { visibility: 'none' },
+      paint: { 'circle-radius': 12, 'circle-color': 'transparent', 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 2.5 },
+    });
   }
 
   function setSourceData(id, fc) {
@@ -488,6 +504,7 @@
 
   /** Show/hide a logical layer group and keep the legend checkbox in sync. */
   function setLayerVisible(key, visible) {
+    setTemperatureMapVisible(false);
     if (key === 'shade') { setShadeEnabled(Boolean(visible)); return; }
     const ids = LAYER_GROUPS[key];
     if (!ids) return;
@@ -527,12 +544,15 @@
   function fitPadding() {
     return {
       top: document.querySelector('.map-toolbar').offsetHeight + 36,
-      left: 30, right: 30, bottom: ui.dock.offsetHeight + 60,
+      left: 30, right: 30, bottom: (state.temperature.mapVisible ? $('temperature-map-key').offsetHeight : ui.dock.offsetHeight) + 60,
     };
   }
 
   function fitToBbox(bbox) {
     if (!bbox || bbox.length < 4) return;
+    map.resize();
+    // Point inspection leaves camera padding behind; do not count it twice when fitting.
+    map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: fitPadding(), duration: motionMs(800), maxZoom: 18 });
   }
 
@@ -549,7 +569,7 @@
   // -- popups
   function popup(persistent) {
     return new maplibregl.Popup({
-      closeButton: persistent, closeOnClick: persistent, maxWidth: '360px', offset: 14,
+      closeButton: persistent, closeOnClick: persistent, maxWidth: `${Math.min(360, ui.map.clientWidth - 40)}px`, offset: 14,
       className: persistent ? 'pop-pinned' : 'pop-hover',
     });
   }
@@ -702,6 +722,7 @@
   function focusSite(siteId, zoom, preferredRuleId) {
     const f = siteFeature(siteId);
     if (!f) return false;
+    setTemperatureMapVisible(false);
     map.easeTo({ center: f.geometry.coordinates, zoom: Math.max(map.getZoom(), zoom || 18), duration: motionMs(700) });
     pinPopup(f.geometry.coordinates, siteCard(f.properties, preferredRuleId));
     return true;
@@ -710,6 +731,19 @@
   function wireMapEvents() {
     map.on('zoom', scheduleScale);
     map.on('move', scheduleScale);
+    map.on('mouseenter', 'temperature-points', () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'temperature-points', () => { map.getCanvas().style.cursor = ''; hideHover(); });
+    map.on('mousemove', 'temperature-points', (e) => {
+      if (!state.temperature.mapVisible || !e.features.length) return;
+      const p = e.features[0].properties;
+      if (!state.hoverPopup) state.hoverPopup = popup(false);
+      state.hoverPopup.setLngLat(e.lngLat).setDOMContent(temperaturePointCard(p)).addTo(map);
+    });
+    map.on('click', 'temperature-points', (e) => {
+      if (!state.temperature.mapVisible || !e.features.length) return;
+      hideHover();
+      selectTemperaturePoint(e.features[0].properties.sample_id, { focusMap: true, pin: true });
+    });
     map.on('mousemove', 'sites', (e) => {
       if (state.draw.active || state.pickingStreet || !e.features.length) return;
       map.getCanvas().style.cursor = 'pointer';
@@ -758,6 +792,7 @@
 
   // -- drawing a street axis
   function setStreetPicking(active) {
+    if (active) setTemperatureMapVisible(false);
     state.pickingStreet = Boolean(active);
     ui.map.classList.toggle('picking-street', state.pickingStreet);
     map.getCanvas().style.cursor = '';
@@ -767,6 +802,7 @@
 
   function startDraw() {
     if (state.loadingStreet || state.planning || state.agent.streaming || !state.config) return;
+    setTemperatureMapVisible(false);
     setStreetPicking(false);
     state.draw.active = true;
     state.draw.points = [];
@@ -872,6 +908,7 @@
 
   /** POST /api/street. */
   async function loadStreet(req) {
+    cancelAutoApply();
     state.loadingStreet = true;
     renderWorkflow();
     setBusy(ui.searchBtn, true);
@@ -991,12 +1028,79 @@
     state.dirty = !sc || ['spacing_m', 'species_id', 'side', 'mode'].some(key => p[key] !== sc.params[key])
       || p.crown_diameter_m !== sc.species.mature_crown_d_m
       || Boolean(ui.label.value.trim() && ui.label.value.trim() !== sc.label);
-    invalidateTemperature(state.dirty ? 'Apply the changed plan before comparing temperatures.' : 'Ready to compare this plan with the current trees.');
+    scheduleAutoApply();
     renderWorkflow();
   }
 
+  function cancelAutoApply() {
+    clearTimeout(state.autoApply.timer);
+    Object.assign(state.autoApply, { pending: false, failed: false, rules: {}, cooling: null, revision: state.autoApply.revision + 1 });
+  }
+
+  /** Keep editing responsive; serialize saves and only display the latest revision. */
+  function scheduleAutoApply(delay = 250) {
+    if (!state.street) return;
+    const auto = state.autoApply;
+    if (state.temperature.result && !auto.cooling) {
+      auto.cooling = { selectedId: state.temperature.selectedId, mapVisible: state.temperature.mapVisible };
+    }
+    auto.revision += 1;
+    auto.pending = true;
+    auto.failed = false;
+    invalidateTemperature('Updating the plan…');
+    clearTimeout(auto.timer);
+    auto.timer = setTimeout(flushAutoApply, delay);
+    renderWorkflow();
+  }
+
+  async function flushAutoApply() {
+    const auto = state.autoApply;
+    if (!auto.pending || auto.running || state.planning || state.loadingStreet || state.agent.streaming) return;
+    if (!ui.planForm.checkValidity() || ui.rules.querySelector('input:invalid')) {
+      auto.pending = false;
+      auto.failed = true;
+      renderWorkflow();
+      return;
+    }
+    auto.pending = false;
+    auto.running = true;
+    const revision = auto.revision;
+    const patches = auto.rules;
+    auto.rules = {};
+    renderWorkflow();
+    try {
+      for (const [ruleId, patch] of Object.entries(patches)) {
+        state.updatingRules = true;
+        const res = await api(`/api/rules/${encodeURIComponent(state.pack.id)}/${encodeURIComponent(ruleId)}`, { method: 'PUT', body: patch });
+        setRulePack(res.pack || withOverrides(state.pack, { [ruleId]: patch }), { render: false });
+        delete patches[ruleId];
+      }
+      state.updatingRules = false;
+      if (revision !== auto.revision) return;
+      renderRules();
+      const result = await runPlan(formParams(), { replaceId: state.activeScenarioId, autoRevision: revision });
+      if (revision !== auto.revision) return;
+      if (!result) { auto.failed = true; return; }
+      if (auto.cooling) {
+        await compareTemperature({ restore: auto.cooling });
+        if (revision === auto.revision) auto.cooling = null;
+      }
+    } catch (err) {
+      // Keep unsaved edits for retry; newer edits to the same field take precedence.
+      for (const [id, patch] of Object.entries(patches)) auto.rules[id] = { ...patch, ...auto.rules[id] };
+      auto.failed = true;
+      auto.pending = false;
+      setError(`Could not apply changes: ${err.message}`);
+    } finally {
+      auto.running = false;
+      state.updatingRules = false;
+      renderWorkflow();
+      if (auto.pending) auto.timer = setTimeout(flushAutoApply, 0);
+    }
+  }
+
   /** POST /api/plan for the current street; the new scenario becomes active. */
-  async function runPlan(params, { replaceId = null } = {}) {
+  async function runPlan(params, { replaceId = null, autoRevision = null } = {}) {
     if (!state.street) { setError('Explore a street before planning.'); return null; }
     if (state.planning) return null;
     state.planning = true;
@@ -1004,12 +1108,13 @@
     setBusy(ui.planBtn, true);
     try {
       const sc = await api('/api/plan', { method: 'POST', body: { street_id: state.street.street_id, ...params } });
+      if (autoRevision !== null && autoRevision !== state.autoApply.revision) return null;
       addScenario(sc, { replaceId });
-      selectScenario(sc.scenario_id);
+      selectScenario(sc.scenario_id, { fromAuto: autoRevision !== null });
       clearError();
       return sc;
     } catch (err) {
-      setError(`Plan: ${err.message}`);
+      if (autoRevision === null || autoRevision === state.autoApply.revision) setError(`Plan: ${err.message}`);
       return null;
     } finally {
       state.planning = false;
@@ -1041,9 +1146,10 @@
   }
 
   /** Show a scenario on the map (loading its street first if it differs). */
-  function selectScenario(scenarioId) {
+  function selectScenario(scenarioId, { fromAuto = false } = {}) {
     const sc = state.scenarios.find((s) => s.scenario_id === scenarioId);
     if (!sc) return;
+    if (!fromAuto) cancelAutoApply();
     if (!state.street || state.street.street_id !== sc.street_id) {
       const st = state.streets.get(sc.street_id);
       if (st) applyStreet(st, { fit: true });
@@ -1059,7 +1165,7 @@
     for (const name of ['side', 'mode']) {
       for (const input of ui.planForm.querySelectorAll(`input[name="${name}"]`)) input.checked = input.value === params[name];
     }
-    ui.label.value = '';
+    if (!fromAuto) ui.label.value = '';
     ui.spacingOut.textContent = `${fmt.num(ui.spacing.value, 1)} m`;
     renderSpeciesHint();
     const fc = decorateSites(sc.sites || emptyFc());
@@ -1077,6 +1183,7 @@
   }
 
   function clearScenarioView() {
+    cancelAutoApply();
     state.activeScenarioId = null;
     invalidateTemperature('Choose a street and create a plan first.');
     state.siteIndex = new Map();
@@ -1297,6 +1404,7 @@
   async function runAlternative(spec) {
     if (state.planning || state.loadingStreet || state.updatingRules) return;
     applyPlanParams(spec.params, spec.name);
+    cancelAutoApply();
     const created = await runPlan({ ...formParams(), label: spec.name });
     if (created) {
       $('result-title').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
@@ -1414,7 +1522,7 @@
       $('existing-tree-count').textContent = `${fmt.int(trees)} existing trees · ${fmt.pct(now)} cover today`;
     }
     ui.planMeta.replaceChildren(...[
-      ['valid', s.valid, 'green · no rule conflicts found'], ['conditional', s.conditional, 'amber · recommendation not met'], ['invalid', s.invalid, 'red · excluded from this plan'],
+      ['valid', s.valid, 'clear'], ['conditional', s.conditional, 'to review'], ['invalid', s.invalid, 'excluded'],
     ].map(([verdict, count, label]) => el('span', { class: `result-verdict verdict-${verdict}`, text: `${count} ${label}` })));
     const reasons = failedReasonCounts(sc);
     if (reasons.length) $('review-reasons').replaceChildren(
@@ -1469,7 +1577,9 @@
   }
 
   function renderWorkflow() {
-    const busy = state.loadingStreet || state.planning || state.updatingRules || state.agent.streaming;
+    const applying = state.autoApply.pending || state.autoApply.running;
+    const busy = state.loadingStreet || state.planning || state.updatingRules || state.agent.streaming || applying;
+    const editingBusy = state.loadingStreet || state.agent.streaming || ((state.planning || state.updatingRules) && !state.autoApply.running);
     const rulesPending = activeScenario() && state.pack && JSON.stringify(state.pack.rules) !== JSON.stringify(activeScenario().rules_used?.rules);
     const hasPlan = Boolean(activeScenario());
     $('settings-card').hidden = !state.street;
@@ -1480,9 +1590,10 @@
     if (ui.restrictionPreview) ui.restrictionPreview.hidden = Boolean(state.street);
     document.querySelector('.data-details').hidden = !state.street;
     ui.fitStreet.hidden = !state.street;
-    $('back-to-plan').textContent = state.street ? 'Back to settings' : 'Back to street selection';
-    $('growth-dock').hidden = !hasPlan || state.draw.active || state.pickingStreet;
-    $('map-key').hidden = !state.street || state.draw.active || state.pickingStreet;
+    $('back-to-plan').textContent = state.temperature.mapVisible ? 'Cooling details' : state.street ? 'Back to settings' : 'Back to street selection';
+    $('growth-dock').hidden = !hasPlan || state.draw.active || state.pickingStreet || state.temperature.mapVisible;
+    $('map-key').hidden = !state.street || state.draw.active || state.pickingStreet || state.temperature.mapVisible;
+    $('map-layers').hidden = state.temperature.mapVisible;
     $('map-key-verdicts').hidden = !hasPlan;
     $('review-checks').hidden = !$('review-reasons').childElementCount;
     $('refresh-tree-data').disabled = busy;
@@ -1490,7 +1601,8 @@
     $('temperature-btn').disabled = busy || !canCompareTemperature || state.temperature.pending;
     for (const input of $('temperature-form').querySelectorAll('input, select')) input.disabled = busy || !activeScenario();
     $('temperature-map').disabled = busy || !state.temperature.result;
-    if (state.dirty || rulesPending) $('temperature-status').textContent = 'Apply the changed plan or rules before comparing temperatures.';
+    $('temperature-view').disabled = busy || !state.temperature.result;
+    $('temperature-point').disabled = busy || !state.temperature.result;
     ui.city.disabled = busy || !state.config;
     ui.search.disabled = busy || !state.config;
     ui.searchBtn.disabled = busy || !state.config;
@@ -1507,18 +1619,15 @@
     for (const chip of ui.demoChips.children) chip.disabled = busy;
     for (const scenario of ui.scenarios.querySelectorAll('button')) scenario.disabled = busy;
     ui.compareBtn.disabled = busy || streetScenarios().length < 2;
-    ui.rules.inert = busy;
+    ui.rules.inert = editingBusy;
     ui.rulesReset.disabled = busy;
     ui.gotoTrees.disabled = busy || !state.street;
     ui.editRestrictions.disabled = busy || !state.street;
     if (ui.rulesPending) {
       ui.rulesPending.hidden = !rulesPending;
       ui.rulesPending.textContent = rulesPending
-        ? 'These restrictions differ from the selected plan. Apply them in Adjust the trees to update the map.'
+        ? state.autoApply.failed ? 'Update failed. Retry to apply these restrictions.' : 'Updating the plan with these restrictions…'
         : '';
-    }
-    if ($('rules-editor') && !state.rulesEditorPinned) {
-      $('rules-editor').open = !hasPlan || Boolean(rulesPending);
     }
     for (const chip of ui.planAlternatives.querySelectorAll('button')) chip.disabled = busy;
     for (const chip of ui.flagSummary.querySelectorAll('button')) chip.disabled = busy;
@@ -1526,33 +1635,37 @@
     ui.compareHere.disabled = busy || streetScenarios().length < 2;
     ui.send.disabled = busy;
     for (const chip of ui.promptChips.children) chip.disabled = busy;
-    for (const input of ui.planForm.querySelectorAll('input, select')) input.disabled = busy || !state.street;
-    ui.planBtn.disabled = busy || !state.street || (hasPlan && !state.dirty && !rulesPending);
-    ui.planBtn.textContent = state.planning ? 'Checking tree positions…' : rulesPending ? 'Apply rules' : state.dirty ? 'Apply changes' : 'Plan is up to date';
+    for (const input of ui.planForm.querySelectorAll('input, select')) input.disabled = editingBusy || !state.street;
+    ui.planBtn.disabled = busy || !state.street;
+    ui.planBtn.textContent = applying ? 'Updating plan…' : state.autoApply.failed || state.dirty || rulesPending ? 'Retry update' : 'Duplicate plan';
+    ui.planBtn.classList.toggle('btn-primary', !hasPlan || state.autoApply.failed);
     if (!activeScenario() && !state.planning) ui.planBtn.textContent = 'Create tree plan';
     ui.fitStreet.disabled = !state.street;
     for (const control of [ui.year, ui.play, ui.shade]) control.disabled = !activeScenario() || busy;
     ui.workflowStatus.textContent = state.loadingStreet ? 'Loading the street and checking available data…'
+      : applying ? 'Updating the plan…'
       : state.planning ? 'Checking planting rules and estimating tree cover…'
       : state.updatingRules ? 'Updating the planting rules…'
       : state.agent.streaming ? 'The assistant is working on your request…'
       : state.status.error ? 'Could not complete this step. Try again or choose another example street.'
-      : rulesPending ? 'Restrictions changed. Apply them to update the map.'
-      : state.dirty ? 'Settings changed. Apply changes to update the map.'
+      : state.autoApply.failed ? 'Changes could not be applied. Check the values and retry.'
+      : rulesPending || state.dirty ? 'Updating the plan…'
       : activeScenario() ? `Plan ready. ${planHeadline(activeScenario())}${streetScenarios().length > 1 ? ' Compare with your other plan.' : ''}`
       : state.street ? 'Street ready. Review the planting restrictions, then create a plan.' : 'Choose a street to start.';
-    ui.planHint.textContent = rulesPending ? 'Planting restrictions changed since this plan. Apply them to update its checks and map.'
-      : state.dirty ? 'The map still shows your previous plan. Apply your changes below.'
-      : hasPlan ? 'Change a setting to create an alternative. Your previous plan stays available for comparison.'
+    ui.planHint.textContent = state.autoApply.failed ? 'The map still shows the last completed plan. Check the values and retry.'
+      : applying ? 'Changes apply automatically. Updating…'
+      : hasPlan ? 'Changes apply automatically. Duplicate a plan to keep a comparison.'
       : 'Create a plan to check planting positions and estimate tree cover.';
+    ui.planHint.hidden = !ui.planHint.textContent;
     ui.mapHint.textContent = state.loadingStreet && state.pickingStreet ? 'Finding the clicked street and loading its data…'
-      : state.pickingStreet ? 'Click the centre of a street to select it and create a tree plan. Drag to move the map. Escape cancels.'
+      : state.pickingStreet ? 'Click a street to start a plan.'
       : state.draw.active ? 'Click at least two points on the map. Then choose Finish drawing. Escape cancels.' : activeScenario()
-      ? `${state.street.name} · Squares are existing trees. Rings are proposed positions. Click a ring to see its checks.`
+      ? state.temperature.mapVisible ? `${state.street.name} · Select a sidewalk point to see its cooling.` : `${state.street.name} · Click a tree to inspect it.`
       : 'Explore a street to see possible tree positions.';
     ui.workflowStatus.classList.toggle('is-pending', busy || state.dirty || Boolean(rulesPending));
+    ui.workflowStatus.hidden = !busy && !state.dirty && !rulesPending && !state.status.error;
     const sc = activeScenario();
-    $('review-result').hidden = !sc;
+    $('review-result').hidden = true;
     if (sc) {
       const now = existingCover(sc);
       const later = cover30(sc);
@@ -1569,18 +1682,145 @@
     else ui.assistantToggle.focus();
   }
 
-  function invalidateTemperature(message = 'Settings changed. Compare temperatures again.') {
+  function invalidateTemperature(message = 'Settings changed. Update the cooling comparison.') {
+    setTemperatureMapVisible(false);
     state.temperature.seq += 1;
     state.temperature.pending = false;
     state.temperature.result = null;
+    state.temperature.selectedId = '';
+    setSourceData('temperature', emptyFc());
+    setSourceData('temperature-selected', emptyFc());
     $('temperature-result').hidden = true;
-    $('temperature-btn').textContent = 'Compare temperatures';
+    $('temperature-settings').open = true;
+    $('temperature-settings-summary').textContent = 'Comparison settings';
+    $('temperature-btn').textContent = 'Calculate cooling';
     $('temperature-status').textContent = message;
   }
 
-  async function compareTemperature() {
+  const temperatureSamples = () => state.temperature.result?.samples?.features || [];
+  const temperatureLocation = (p) => `${p.side === 'left' ? 'Left' : 'Right'} sidewalk · ${fmt.int(p.station_m)} m from start`;
+  const coolingText = (value) => value > 0 ? `${fmt.num(value, 2)}°C cooler` : '0.00°C change';
+
+  function temperaturePointCard(p) {
+    return el('div', { class: 'pop' }, [
+      el('strong', { text: temperatureLocation(p) }),
+      el('strong', { class: 'cooling-popup-value', text: coolingText(p.cooling_c) }),
+      el('span', { text: `${fmt.num(p.reference_air_c, 2)}°C input → ${fmt.num(p.proposed_air_c, 2)}°C estimated` }),
+      el('span', { class: 'hint', text: 'Air estimate from nearby canopy · not a measurement' }),
+    ]);
+  }
+
+  /** Use a separate map mode so rule colors cannot be mistaken for temperature. */
+  function setTemperatureMapVisible(visible) {
+    const t = state.temperature;
+    visible = Boolean(visible && t.result);
+    if (visible === t.mapVisible) return;
+    t.mapVisible = visible;
+    hideHover();
+    if (state.pinPopup) state.pinPopup.remove();
+    if (visible) {
+      stopAnimation();
+      t.savedLayers = ['existing-crowns', 'existing-marks', 'crowns', 'sites', 'sites-ring', 'shade-fill', 'junctions-circle', 'parking-fill', 'parking-line']
+        .filter(id => map.getLayer(id)).map(id => [id, map.getLayoutProperty(id, 'visibility') || 'visible']);
+      for (const [id] of t.savedLayers) map.setLayoutProperty(id, 'visibility', 'none');
+    } else {
+      for (const [id, visibility] of t.savedLayers) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
+      t.savedLayers = [];
+    }
+    if (map.getLayer('basemap')) {
+      map.setPaintProperty('basemap', 'raster-saturation', visible ? -0.8 : 0);
+      map.setPaintProperty('basemap', 'raster-brightness-max', visible ? 0.55 : 1);
+    }
+    for (const id of ['temperature-points', 'temperature-selected']) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+    }
+    $('temperature-map-key').hidden = !visible;
+    document.querySelector('.map-workspace').classList.toggle('is-cooling', visible);
+    $('temperature-view').setAttribute('aria-pressed', String(visible));
+    renderWorkflow();
+  }
+
+  function showCoolingMap() {
+    if (!state.temperature.result) return;
+    if (state.draw.active) stopDraw();
+    setStreetPicking(false);
+    setTemperatureMapVisible(true);
+    ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+    if (state.temperature.selectedId) selectTemperaturePoint(state.temperature.selectedId, { focusMap: true, pin: true });
+    else fitToBbox(state.street.bbox);
+  }
+
+  function selectTemperaturePoint(id, { focusMap = false, pin = false } = {}) {
+    const feature = temperatureSamples().find(f => f.properties.sample_id === id);
+    state.temperature.selectedId = feature ? id : '';
+    setSourceData('temperature-selected', { type: 'FeatureCollection', features: feature ? [feature] : [] });
+    renderTemperatureReading();
+    if (focusMap && feature) {
+      setStreetPicking(false);
+      setTemperatureMapVisible(true);
+      map.easeTo({ center: feature.geometry.coordinates, padding: fitPadding(), zoom: Math.max(map.getZoom(), 17.5), duration: motionMs(400) });
+    }
+    if (state.pinPopup) state.pinPopup.remove();
+    if (pin && feature) pinPopup(feature.geometry.coordinates, temperaturePointCard(feature.properties));
+  }
+
+  /** A small profile of real samples; the selector and map expose every point. */
+  function renderTemperatureProfile() {
+    const samples = temperatureSamples();
+    const length = Math.max(1, state.street.length_m);
+    $('temperature-point').replaceChildren(el('option', { value: '', text: 'Street average' }),
+      ...samples.map(f => el('option', { value: f.properties.sample_id, text: temperatureLocation(f.properties) })));
+    const rows = ['left', 'right'].map(side => {
+      const sideSamples = samples.filter(f => f.properties.side === side).sort((a, b) => a.properties.station_m - b.properties.station_m);
+      if (!sideSamples.length) return null;
+      const count = Math.min(20, sideSamples.length);
+      const preview = Array.from({ length: count }, (_, i) => sideSamples[Math.round(i * (sideSamples.length - 1) / Math.max(1, count - 1))]);
+      return el('div', { class: 'cooling-profile-row' }, [
+        el('span', { class: 'hint', text: side === 'left' ? 'Left' : 'Right' }),
+        el('div', { class: 'cooling-profile-bars' }, preview.map(f => {
+          const p = f.properties;
+          const label = `${temperatureLocation(p)} · ${coolingText(p.cooling_c)}`;
+          return el('button', {
+            type: 'button', class: 'temperature-profile-point', 'data-sample-id': p.sample_id,
+            'aria-label': label, title: label, 'aria-pressed': 'false',
+            style: `--cooling-height: ${Math.max(5, Math.min(100, p.cooling_c / 0.5 * 100))}%; left: ${Math.max(0, Math.min(97, p.station_m / length * 97))}%`,
+            onclick: () => selectTemperaturePoint(p.sample_id, { focusMap: true, pin: true }),
+          });
+        })),
+      ]);
+    }).filter(Boolean);
+    $('temperature-profile').replaceChildren(...rows,
+      el('p', { class: 'hint cooling-profile-labels', text: 'Street start → end · taller bars = more cooling' }));
+  }
+
+  function renderTemperatureReading() {
+    const result = state.temperature.result;
+    if (!result) return;
+    const feature = temperatureSamples().find(f => f.properties.sample_id === state.temperature.selectedId);
+    const p = feature ? feature.properties : result;
+    $('temperature-location').textContent = feature ? temperatureLocation(p) : 'Street average';
+    $('temperature-point').value = state.temperature.selectedId;
+    $('temperature-average').hidden = !feature;
+    $('temperature-before').textContent = `${fmt.num(p.reference_air_c, 2)}°C`;
+    $('temperature-after').textContent = `${fmt.num(p.proposed_air_c, 2)}°C`;
+    $('temperature-delta').textContent = coolingText(p.cooling_c);
+    $('temperature-local-note').textContent = feature
+      ? 'Based on added canopy within 10 m of this point. The same input temperature is used at every point.'
+      : 'Cooling varies along the street. Select a sidewalk point below or on the map.';
+    $('temperature-range').textContent = `Sensitivity: ${fmt.num(p.cooling_low_c, 2)}–${fmt.num(p.cooling_high_c, 2)}°C cooler (${fmt.num(p.proposed_air_low_c, 2)}–${fmt.num(p.proposed_air_high_c, 2)}°C). Not a forecast interval; actual cooling can fall outside it.`;
+    $('temperature-canopy').textContent = `${feature ? 'Canopy within 10 m of this point' : `Mean canopy around ${result.sample_count} sidewalk points`}: ${fmt.pct(p.existing_local_canopy_pct)} → ${fmt.pct(p.proposed_local_canopy_pct)}.`;
+    $('temperature-shade').textContent = feature
+      ? `Tree shade here: ${p.existing_tree_shade ? 'shaded' : 'unshaded'} → ${p.proposed_tree_shade ? 'shaded' : 'unshaded'} · ${result.when}`
+      : `Sidewalk in tree shade: ${fmt.pct(result.existing_sidewalk_shade_pct)} → ${fmt.pct(result.proposed_sidewalk_shade_pct)} · ${result.when}`;
+    $('temperature-map-caption').textContent = `Estimated air cooling · year ${result.year}`;
+    for (const button of $('temperature-profile').querySelectorAll('[data-sample-id]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.sampleId === state.temperature.selectedId));
+    }
+  }
+
+  async function compareTemperature({ restore = null } = {}) {
     const scenario = activeScenario();
-    if (!scenario || state.temperature.pending || $('temperature-btn').disabled) return;
+    if (!scenario || state.temperature.pending || (!restore && $('temperature-btn').disabled)) return;
     const form = $('temperature-form');
     if (!form.reportValidity()) return;
     const params = {
@@ -1597,24 +1837,30 @@
       const result = await api('/api/temperature', { method: 'POST', body: params });
       if (seq !== state.temperature.seq || result.scenario_id !== state.activeScenarioId) return;
       state.temperature.result = result;
-      $('temperature-context').textContent = `${state.street.name} · ${displayPlanName(scenario)} · year ${result.year} · ${result.when}`;
-      $('temperature-before').textContent = `${fmt.num(result.reference_air_c, 1)}°C`;
-      $('temperature-after').textContent = `${fmt.num(result.proposed_air_c, 2)}°C`;
-      $('temperature-delta').textContent = result.cooling_c > 0
-        ? `${fmt.num(result.cooling_c, 2)}°C lower in this exploratory air model. The street-specific signal is sidewalk shade: ${fmt.pct(result.existing_sidewalk_shade_pct)} → ${fmt.pct(result.proposed_sidewalk_shade_pct)}.`
-        : `No additional air cooling at the displayed precision. Sidewalk shade still changes from ${fmt.pct(result.existing_sidewalk_shade_pct)} to ${fmt.pct(result.proposed_sidewalk_shade_pct)} at the selected time.`;
-      $('temperature-range').textContent = `Sensitivity range: ${fmt.num(result.proposed_air_low_c, 2)}–${fmt.num(result.proposed_air_high_c, 2)}°C (${fmt.num(result.cooling_low_c, 2)}–${fmt.num(result.cooling_high_c, 2)}°C lower). This is not a forecast interval; actual cooling can fall outside it.`;
-      $('temperature-shade').textContent = `Sidewalk under tree shade: ${fmt.pct(result.existing_sidewalk_shade_pct)} with current trees → ${fmt.pct(result.proposed_sidewalk_shade_pct)} with this plan, at the selected time.`;
-      $('temperature-canopy').textContent = `Average canopy within 10 m of ${result.sample_count} sidewalk sample points: ${fmt.pct(result.existing_local_canopy_pct)} → ${fmt.pct(result.proposed_local_canopy_pct)}.`;
+      $('temperature-settings').open = false;
+      $('temperature-settings-summary').textContent = `Settings · ${fmt.num(result.reference_air_c, 1)}°C · year ${result.year}`;
+      $('temperature-context').textContent = `${state.street.name} · year ${result.year}`;
+      setSourceData('temperature', result.samples);
+      renderTemperatureProfile();
+      renderTemperatureReading();
       $('temperature-limitations').replaceChildren(...result.limitations.map(text => el('li', { text })));
-      $('temperature-status').textContent = 'Comparison ready · research-based illustration, not a local forecast.';
+      $('temperature-status').textContent = '';
       $('temperature-result').hidden = false;
+      if (restore) {
+        selectTemperaturePoint(restore.selectedId);
+        setTemperatureMapVisible(restore.mapVisible);
+      } else {
+        setStreetPicking(false);
+        setTemperatureMapVisible(true);
+        fitToBbox(state.street.bbox);
+        $('temperature-title').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
+      }
     } catch (err) {
       if (seq === state.temperature.seq) $('temperature-status').textContent = `Could not compare temperatures: ${err.message}`;
     } finally {
       if (seq === state.temperature.seq) {
         state.temperature.pending = false;
-        $('temperature-btn').textContent = 'Compare temperatures';
+        $('temperature-btn').textContent = state.temperature.result ? 'Update comparison' : 'Calculate cooling';
         renderWorkflow();
       }
     }
@@ -1870,6 +2116,7 @@
   }
 
   function setShadeEnabled(on) {
+    setTemperatureMapVisible(false);
     state.shade.enabled = on;
     ui.shade.setAttribute('aria-pressed', String(on));
     ui.shade.lastChild.textContent = on ? 'Hide shade' : 'Show shade';
@@ -1981,9 +2228,12 @@
     };
   }
 
-  function setRulePack(pack) {
+  function setRulePack(pack, { render = true } = {}) {
+    if (activeScenario() && JSON.stringify(state.pack?.rules) !== JSON.stringify(pack.rules)) {
+      invalidateTemperature('Planting restrictions changed. Apply them before comparing cooling.');
+    }
     state.pack = pack;
-    renderRules();
+    if (render) renderRules();
   }
 
   function restrictionStrength(mode) {
@@ -2045,6 +2295,7 @@
 
   function focusRestriction(ruleId) {
     ui.rulesCard.hidden = false;
+    ui.rulesCard.open = true;
     state.rulesEditorPinned = true;
     if ($('rules-editor')) $('rules-editor').open = true;
     if (LOCKED_RESTRICTIONS.some((item) => item.id === ruleId)) $('locked-rules-details').open = true;
@@ -2061,6 +2312,9 @@
   }
 
   function renderRules() {
+    const focused = document.activeElement;
+    const focusedRow = focused.closest?.('.restriction');
+    const focusTarget = focusedRow ? { row: focusedRow.id, type: focused.type, value: focused.value } : null;
     const pack = state.pack;
     if (!pack) {
       ui.rulesStandard.replaceChildren();
@@ -2094,6 +2348,11 @@
     ])));
     ui.restrictionPreview.textContent = packPreview(pack);
     ui.restrictionPreview.hidden = Boolean(state.street);
+    if (focusTarget) {
+      const input = Array.from($(focusTarget.row)?.querySelectorAll('input') || [])
+        .find(node => node.type === focusTarget.type && (node.type !== 'radio' || node.value === focusTarget.value));
+      input?.focus({ preventScroll: true });
+    }
   }
 
   function restrictionRow(rule, pack) {
@@ -2103,11 +2362,10 @@
         el('span', { text: 'At least' }),
         el('input', {
           class: 'input', type: 'number', min: '0', max: '50', step: '0.05', value: String(rule.min_distance_m),
-          'aria-label': `${rule.label}, minimum distance in metres`, disabled: !rule.enabled,
-          onchange: (e) => {
-            const v = Number(e.target.value);
-            if (!Number.isFinite(v) || v < 0 || v > 50) { e.target.value = String(rule.min_distance_m); return; }
-            overrideRule(rule.id, { min_distance_m: v });
+          'aria-label': `${rule.label}, minimum distance in metres`, disabled: !rule.enabled, required: true,
+          oninput: (e) => {
+            if (!e.target.validity.valid) { scheduleAutoApply(); return; }
+            overrideRule(rule.id, { min_distance_m: Number(e.target.value) }, 250);
           },
         }),
         el('span', { text: 'm' }),
@@ -2120,14 +2378,14 @@
       el('label', { class: 'seg-item' }, [
         el('input', {
           type: 'radio', name: modeName, value: 'must', checked: rule.mode === 'must', disabled: !rule.enabled,
-          onchange: () => { if (rule.mode !== 'must') overrideRule(rule.id, { mode: 'must' }); },
+          onchange: () => overrideRule(rule.id, { mode: 'must' }),
         }),
         el('span', { text: 'Required' }),
       ]),
       el('label', { class: 'seg-item' }, [
         el('input', {
           type: 'radio', name: modeName, value: 'should', checked: rule.mode === 'should', disabled: !rule.enabled,
-          onchange: () => { if (rule.mode !== 'should') overrideRule(rule.id, { mode: 'should' }); },
+          onchange: () => overrideRule(rule.id, { mode: 'should' }),
         }),
         el('span', { text: 'Recommended' }),
       ]),
@@ -2153,35 +2411,34 @@
     ]);
   }
 
-  /** PUT /api/rules/{pack}/{rule}; on success re-run the active plan under the new rules. */
-  async function overrideRule(ruleId, patch) {
-    if (!state.pack || state.updatingRules || state.planning || state.loadingStreet || state.agent.streaming) return;
-    state.updatingRules = true;
-    renderWorkflow();
-    try {
-      const res = await api(`/api/rules/${encodeURIComponent(state.pack.id)}/${encodeURIComponent(ruleId)}`, { method: 'PUT', body: patch });
-      setRulePack(res.pack || withOverrides(state.pack, { [ruleId]: patch }));
-      clearError();
-      await replanActive();
-    } catch (err) {
-      setError(`Rule: ${err.message}`);
-      renderRules();
-    } finally {
-      state.updatingRules = false;
-      renderWorkflow();
+  /** Merge rapid edits and save them before calculating the next plan. */
+  function overrideRule(ruleId, patch, delay = 0) {
+    if (!state.pack || state.loadingStreet || state.agent.streaming) return;
+    if (patch.enabled != null) {
+      const row = $(`restriction-${ruleId}`);
+      row.classList.toggle('off', !patch.enabled);
+      for (const input of row.querySelectorAll('input:not([type="checkbox"])')) input.disabled = !patch.enabled;
     }
+    state.autoApply.rules[ruleId] = { ...state.autoApply.rules[ruleId], ...patch };
+    scheduleAutoApply(delay);
   }
 
   async function resetOverrides() {
     if (state.updatingRules || state.planning || state.loadingStreet || state.agent.streaming) return;
+    const cooling = state.temperature.result
+      ? { selectedId: state.temperature.selectedId, mapVisible: state.temperature.mapVisible }
+      : state.autoApply.cooling;
+    cancelAutoApply();
+    state.autoApply.cooling = cooling;
     state.updatingRules = true;
+    invalidateTemperature('Updating the planting restrictions…');
     renderWorkflow();
     setBusy(ui.rulesReset, true);
     try {
       await api('/api/rules/overrides', { method: 'DELETE' });
       await loadRulePack();
       clearError();
-      await replanActive();
+      scheduleAutoApply(0);
     } catch (err) {
       setError(`Rules: ${err.message}`);
     } finally {
@@ -2202,19 +2459,6 @@
       if (fresh) pack = withOverrides(fresh, res.overrides || {});
     } catch (_) { /* config copy is good enough */ }
     setRulePack(pack);
-  }
-
-  /** Re-run the active scenario with its own params; the new one replaces it in the list. */
-  async function replanActive() {
-    const sc = activeScenario();
-    if (!sc || !state.street || sc.street_id !== state.street.street_id) return;
-    const p = sc.params || {};
-    await runPlan({
-      spacing_m: p.spacing_m, side: p.side, species_id: p.species_id, mode: p.mode,
-      crown_diameter_m: p.crown_diameter_m,
-      offset_from_edge_m: p.offset_from_edge_m, pit_width_m: p.pit_width_m,
-      rule_pack_id: p.rule_pack_id, label: p.label || null,
-    }, { replaceId: sc.scenario_id });
   }
 
   // ------------------------------------------------------------ agent chat
@@ -2491,11 +2735,19 @@
     $('go-temperature').addEventListener('click', () => {
       $('temperature-card').open = true;
       $('temperature-title').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
-      $('reference-air').focus({ preventScroll: true });
+      (state.temperature.result ? $('temperature-point') : $('reference-air')).focus({ preventScroll: true });
     });
+    $('temperature-point').addEventListener('change', (event) => selectTemperaturePoint(event.target.value, { focusMap: true, pin: true }));
+    $('temperature-average').addEventListener('click', () => {
+      selectTemperaturePoint('');
+      if (state.temperature.mapVisible) fitToBbox(state.street.bbox);
+    });
+    $('temperature-view').addEventListener('click', showCoolingMap);
+    $('temperature-map-close').addEventListener('click', () => setTemperatureMapVisible(false));
     $('temperature-map').addEventListener('click', () => {
       const result = state.temperature.result;
       if (!result || result.scenario_id !== state.activeScenarioId) return;
+      setTemperatureMapVisible(false);
       stopAnimation();
       state.shade.when = { month: Number($('temperature-month').value), day: Number($('temperature-day').value), hour: Number($('temperature-hour').value) };
       setYear(result.year);
@@ -2506,7 +2758,7 @@
     $('undo-draw').addEventListener('click', () => { state.draw.points.pop(); renderDraw(); });
     $('review-result').addEventListener('click', () => {
       $('review-card').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
-      (ui.compareHere.hidden ? ui.viewPlan : ui.compareHere).focus({ preventScroll: true });
+      (ui.compareHere.hidden ? $('go-temperature') : ui.compareHere).focus({ preventScroll: true });
     });
     $('refresh-tree-data').addEventListener('click', () => {
       if (!state.street || state.loadingStreet || state.planning) return;
@@ -2516,6 +2768,7 @@
       loadStreetAndPlan({ city: state.street.city, line: axis.geometry.coordinates, name: state.street.name });
     });
     $('show-existing').addEventListener('click', () => {
+      setTemperatureMapVisible(false);
       const toggle = ui.legendToggles.find(cb => cb.dataset.layer === 'existing_trees');
       if (toggle) toggle.checked = true;
       setLayerVisible('existing_trees', true);
@@ -2525,9 +2778,10 @@
     $('finish-draw').addEventListener('click', finishDraw);
     $('cancel-draw').addEventListener('click', stopDraw);
     $('back-to-plan').addEventListener('click', () => {
-      const target = state.street ? ui.rulesCard : ui.header;
+      const target = state.temperature.mapVisible ? $('temperature-card') : state.street ? $('settings-card') : ui.header;
+      if (target.tagName === 'DETAILS') target.open = true;
       target.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
-      (state.street ? ui.rulesCard.querySelector('input, button') : ui.search).focus({ preventScroll: true });
+      (state.temperature.mapVisible ? $('temperature-point') : state.street ? ui.spacing : ui.search).focus({ preventScroll: true });
     });
     ui.gotoTrees.addEventListener('click', () => {
       $('settings-card').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
@@ -2541,11 +2795,18 @@
     ui.assistantClose.addEventListener('click', () => toggleAssistant(false));
     ui.fitStreet.addEventListener('click', () => fitToBbox(state.street && state.street.bbox));
     ui.viewPlan.addEventListener('click', () => {
+      setTemperatureMapVisible(false);
       ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
       fitToBbox(state.street && state.street.bbox);
       ui.map.focus({ preventScroll: true });
     });
     ui.planForm.addEventListener('input', updatePlanDraft);
+    ui.planForm.addEventListener('change', () => {
+      if (state.autoApply.pending) {
+        clearTimeout(state.autoApply.timer);
+        state.autoApply.timer = setTimeout(flushAutoApply, 0);
+      }
+    });
     ui.city.addEventListener('change', () => selectCity(ui.city.value));
     ui.searchForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -2566,7 +2827,13 @@
       updatePlanDraft();
     });
     $('crown-size').addEventListener('input', renderSpeciesHint);
-    ui.planForm.addEventListener('submit', (e) => { e.preventDefault(); if (!ui.planBtn.disabled) runPlan(formParams()); });
+    ui.planForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (ui.planBtn.disabled) return;
+      const pendingRules = activeScenario() && JSON.stringify(state.pack.rules) !== JSON.stringify(activeScenario().rules_used?.rules);
+      if (state.autoApply.failed || state.dirty || pendingRules) scheduleAutoApply(0);
+      else runPlan(formParams());
+    });
     ui.rulesReset.addEventListener('click', resetOverrides);
     ui.compareBtn.addEventListener('click', openCompare);
     ui.compareClose.addEventListener('click', closeCompare);
@@ -2590,6 +2857,7 @@
       if (!ui.agent.hidden) { toggleAssistant(false); return; }
       if (state.draw.active) { stopDraw(); return; }
       if (state.pickingStreet) { setStreetPicking(false); return; }
+      if (state.temperature.mapVisible) { setTemperatureMapVisible(false); return; }
       if (state.pinPopup) state.pinPopup.remove();
     });
     REDUCED_MOTION.addEventListener('change', () => { if (REDUCED_MOTION.matches && state.anim) { stopAnimation(); setYear(MAX_YEAR); } });

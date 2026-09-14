@@ -30,8 +30,13 @@ Use **Select street on map** to pick another street. Escape cancels selection;
 at a distant zoom, the first click zooms in.
 Drawing supports **Undo last point**, **Finish drawing** and **Cancel drawing**.
 Follow **Choose a street → Adjust the trees → Review your plan → Compare temperatures**.
-Expand the street selector to change location; adjust spacing, street sides or species, then
-apply your changes to create another plan. The result explains the marker colors: green means no evaluated rule failed,
+Expand the street selector to change location. Spacing, street sides, species,
+crown size and planting restrictions apply automatically to the current plan.
+Numeric edits use a short typing pause; switches apply immediately. Edits made
+during an update are queued, and only the latest result is displayed. Use
+**Duplicate plan** before editing to keep a version for comparison. A failed update
+keeps the last completed map and your edited values, with **Retry update** available.
+The result explains the marker colors: green means no evaluated rule failed,
 amber means a recommendation is not met, and red means a required rule failed.
 Amber positions remain in the proposed count and canopy estimate; red positions
 are excluded. The reason list separates amber and excluded counts and opens an
@@ -62,12 +67,25 @@ explicit and **Retry Zürich tree register** reloads the same street line and
 creates a new plan. Distance from existing trees is currently a 5 m recommendation,
 so conflicting candidates remain amber rather than being excluded.
 
-**Compare temperatures** is a manual, exploratory air-temperature comparison of
-existing trees versus the selected plan. Enter a reference or measured temperature
-(the default 30°C is illustrative), tree age, and summer time/date. The card shows
-the model's central value and sensitivity range, plus a separate before/after
-tree-shade comparison. **Show this plan's shade on the map** applies that year and
-time. Editing inputs or selecting another plan clears the previous comparison.
+**Cooling along the street** compares existing trees with the selected plan.
+Enter a starting air temperature (30°C is an example) and tree age, then choose
+**Calculate cooling**. The result shows before/after air temperature and estimated
+cooling, initially averaged across sampled sidewalks. Select a colored map point,
+a bar in the street profile, or a location in the selector to inspect local cooling
+from canopy within 10 m. Both street sides are sampled where sidewalks are mapped.
+The profile previews up to 20 points per side; every sample is available on the map
+and in the selector. Its spacing follows distance along the street, with a fixed
+0–0.5°C cooling scale. All points use the same input temperature; these are modeled
+canopy differences, not measured local temperatures.
+
+Comparison settings collapse after calculation. Sensitivity ranges and sources
+are under **How this estimate works**. **Show tree shade** applies the comparison's
+age and summer date/time; **Back to trees** restores the previous map layers.
+Editing temperature inputs or selecting another saved plan clears the comparison.
+Changing tree settings or restrictions refreshes an already calculated cooling
+comparison automatically, retaining the selected sidewalk point and map mode.
+The main screen keeps tree settings and results visible, with restrictions,
+saved plans, provenance and detailed explanations available in disclosures.
 The model transfers a published Tacoma canopy association; it is not calibrated
 for the selected street and is not a local forecast or pavement-temperature model.
 See [temperature method and limitations](docs/temperature-method.md).
@@ -76,7 +94,7 @@ In **Adjust the trees**, species are listed from narrower to wider crowns. The
 **Mature crown diameter** slider also lets you test a custom 2–25 m crown. This
 is a scenario assumption; it does not change the species' height or guarantee
 that a real tree will stay that size. Choosing a species restores its usual
-crown diameter. Apply changes to recalculate crown clearances, growth, canopy,
+crown diameter. Changes automatically recalculate crown clearances, growth, canopy,
 shade and temperature estimates. Each saved plan retains its own size, shown
 in the plan comparison; junction exclusions still apply to small trees.
 

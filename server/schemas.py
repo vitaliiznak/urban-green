@@ -282,6 +282,23 @@ class TemperatureRequest(BaseModel):
     hour: float = Field(15, ge=6, le=18, allow_inf_nan=False)
 
 
+class TemperatureSampleProps(BaseModel):
+    sample_id: str
+    station_m: float
+    side: Side
+    reference_air_c: float
+    proposed_air_c: float
+    proposed_air_low_c: float
+    proposed_air_high_c: float
+    cooling_c: float
+    cooling_low_c: float
+    cooling_high_c: float
+    existing_local_canopy_pct: float
+    proposed_local_canopy_pct: float
+    existing_tree_shade: bool
+    proposed_tree_shade: bool           # existing plus eligible proposed trees
+
+
 class TemperatureResult(BaseModel):
     scenario_id: str
     year: int
@@ -298,6 +315,7 @@ class TemperatureResult(BaseModel):
     existing_sidewalk_shade_pct: float
     proposed_sidewalk_shade_pct: float
     sample_count: int
+    samples: FeatureCollection         # WGS84 Points, properties = TemperatureSampleProps
     method: str
     source_url: str
     limitations: list[str]

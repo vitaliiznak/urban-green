@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
-<link rel="stylesheet" href="/static/style.css?v=plan-delta">
+<link rel="stylesheet" href="/static/style.css?v=street-cooling">
 </head>
 <body>
 <header class="app-header">
@@ -24,12 +24,8 @@
 <!-- Guided planning workflow -->
 <div class="west">
   <header class="panel hdr" id="header">
-    <p class="eyebrow">Street-tree planner</p>
-    <h2 class="intro-title">Make room for more trees.</h2>
-    <p class="intro-copy">Choose a street to see how many trees fit, how much cover they add, and what still needs a site visit.</p>
-    <p class="hint" id="restriction-preview"></p>
     <details id="street-picker" open>
-    <summary class="step-title"><span class="step-number">1</span> Choose a street <span class="change-street">Change</span></summary>
+    <summary class="step-title">Choose a street <span class="change-street">Change</span></summary>
     <div class="hdr-row">
       <div class="hdr-controls">
         <label class="field-inline" id="city-field">
@@ -42,59 +38,33 @@
           <button class="btn" type="submit" id="search-btn">Explore street</button>
         </form>
         <button class="btn btn-ghost" type="button" id="draw" aria-pressed="false">Draw street</button>
-        <p class="hint" id="street-selection-help">Click a street on the map, search by name, or draw your own section.</p>
+        <p class="hint" id="street-selection-help">Search, select on the map, or draw a section.</p>
       </div>
     </div>
-    <p class="hint">Or try an example:</p>
     <div class="chips" id="demo-chips" aria-label="Demo streets"></div>
     </details>
     <p class="street-meta" id="street-meta"></p>
-    <section class="tree-evidence" id="tree-evidence" hidden aria-label="Existing trees and data source">
+    <p class="workflow-status" id="workflow-status" role="status" aria-live="polite">Getting the planner ready…</p>
+    <button class="btn result-jump" type="button" id="review-result" hidden></button>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <details class="data-details"><summary id="data-summary">Data sources</summary>
+      <p class="hint" id="restriction-preview"></p>
+      <section class="tree-evidence" id="tree-evidence" hidden aria-label="Existing trees and data source">
       <strong id="existing-tree-count"></strong>
       <p id="existing-tree-source"></p>
       <p id="existing-tree-limit"></p>
       <button class="btn btn-sm" id="show-existing" type="button">Show existing trees on map</button>
       <button class="btn btn-sm" id="refresh-tree-data" type="button" hidden>Retry Zürich tree register</button>
-    </section>
-    <p class="workflow-status" id="workflow-status" role="status" aria-live="polite">Getting the planner ready…</p>
-    <button class="btn result-jump" type="button" id="review-result" hidden></button>
-    <div class="status" id="status" role="status" aria-live="polite"></div>
-    <details class="data-details"><summary id="data-summary">Data sources and limitations</summary><div class="status" id="data-status"></div></details>
+      </section>
+      <div class="status" id="data-status"></div>
+    </details>
   </header>
 
   <div class="col col-left" id="col-left">
-    <section class="panel card" id="rules-card" aria-labelledby="rules-title" hidden>
-      <header class="card-head">
-        <h2 class="card-title" id="rules-title"><span class="step-number">2</span> Planting restrictions</h2>
-        <span class="card-meta mono" id="rules-meta"></span>
-      </header>
-      <p class="hint">These limits decide whether a proposed tree is green, amber, or excluded. <strong>Required</strong> excludes a failing position. <strong>Recommended</strong> keeps it amber for review.</p>
-      <div class="restriction-summary" id="rules-summary" aria-label="Current restrictions"></div>
-      <p class="card-note" id="rules-source"></p>
-      <p class="hint is-pending-note" id="rules-pending" hidden></p>
-      <details class="restriction-editor" id="rules-editor" open>
-        <summary>Edit distances and required / recommended</summary>
-        <div id="rules">
-          <h3 class="restriction-group">Cited standard</h3>
-          <ul class="restriction-list" id="rules-standard"></ul>
-          <h3 class="restriction-group">Planning defaults</h3>
-          <p class="hint">Editable starting points for this tool, not part of the cited standard.</p>
-          <ul class="restriction-list" id="rules-defaults"></ul>
-        </div>
-      </details>
-      <details class="locked-rules" id="locked-rules-details">
-        <summary>Always applied · cannot be turned off</summary>
-        <ul class="locked-list" id="locked-rules"></ul>
-      </details>
-      <div class="card-foot">
-        <button class="btn btn-ghost btn-sm" id="rules-reset" type="button">Restore default restrictions</button>
-        <button class="btn btn-sm" id="goto-trees" type="button">Next: adjust the trees ↓</button>
-      </div>
-    </section>
 
     <section class="panel card" id="settings-card" aria-labelledby="plan-title" hidden>
       <header class="card-head">
-        <h2 class="card-title" id="plan-title"><span class="step-number">3</span> Adjust the trees</h2>
+        <h2 class="card-title" id="plan-title">Adjust the trees</h2>
 
       </header>
       <form id="plan-form" class="card-body">
@@ -112,12 +82,10 @@
             <label class="seg-item"><input type="radio" name="side" value="left"><span>Left</span></label>
             <label class="seg-item"><input type="radio" name="side" value="right"><span>Right</span></label>
           </div>
-          <p class="hint">Left and right follow the direction of the street line.</p>
         </fieldset>
         <div class="field">
           <label class="field-label" for="species">Tree species</label>
           <select id="species" class="select"></select>
-          <p class="hint" id="species-hint"></p>
         </div>
         <div class="field">
           <div class="field-row">
@@ -125,8 +93,11 @@
             <output class="mono field-value" id="crown-size-out" for="crown-size">10 m</output>
           </div>
           <input id="crown-size" class="range" type="range" min="2" max="25" step="0.5" value="10" aria-describedby="crown-size-hint crown-assumption">
-          <p class="hint" id="crown-size-hint">Width across the crown, not tree spacing. Try a smaller crown to check tighter spaces.</p>
-          <p class="hint" id="crown-assumption"></p>
+          <details class="field-help"><summary>About this tree</summary>
+            <p class="hint" id="species-hint"></p>
+            <p class="hint" id="crown-size-hint">Crown diameter is the width of a mature tree. Smaller crowns may fit tighter spaces.</p>
+            <p class="hint" id="crown-assumption"></p>
+          </details>
         </div>
         <details class="advanced-options"><summary>More planting options</summary>
         <div class="details-body">
@@ -149,11 +120,10 @@
     </section>
 
     <section class="panel card result-card" id="review-card" aria-labelledby="result-title" hidden>
-      <header class="card-head"><h2 class="card-title" id="result-title"><span class="step-number">4</span> Review your plan</h2></header>
+      <header class="card-head"><h2 class="card-title" id="result-title">Your tree plan</h2></header>
       <p id="result-empty" class="hint">Your proposed trees and estimated tree cover will appear here.</p>
       <div id="result-content" hidden>
         <p id="result-name" class="result-name"></p>
-        <p id="result-reading" class="result-reading"></p>
         <p id="result-vs" class="result-vs" hidden></p>
         <div class="result-metrics">
           <div><strong id="result-trees">–</strong><span>proposed trees</span></div>
@@ -163,63 +133,87 @@
             <span class="result-baseline" id="result-cover-was"></span>
           </div>
         </div>
-        <p class="hint" id="result-growth"></p>
-        <p class="hint" id="result-sidewalk"></p>
-        <div id="flag-summary" class="flag-summary" hidden></div>
         <div id="plan-meta" class="verdict-summary"></div>
-        <p id="plan-rule-basis" class="scope-note"></p>
-        <details id="review-checks"><summary>Why are positions flagged?</summary><div id="review-reasons" class="review-reasons"></div></details>
-        <div id="try-alternatives" hidden>
-          <p class="field-label">Try a different plan</p>
-          <p class="hint">Creates another saved plan for this street so you can compare the trade-off.</p>
-          <div class="chips" id="plan-alternatives"></div>
-        </div>
-        <p id="result-guidance" class="hint"></p>
         <div class="result-actions">
           <button type="button" class="btn btn-primary btn-block" id="compare-here" hidden>Compare with your other plans</button>
-          <button type="button" class="btn btn-block" id="go-temperature">Compare temperature and shade ↓</button>
-          <button type="button" class="btn btn-block" id="copy-brief">Copy a short briefing</button>
-          <button type="button" class="btn btn-block" id="view-plan">Show this plan on the map</button>
-          <button type="button" class="btn btn-ghost btn-block" id="edit-restrictions">Edit planting restrictions ↑</button>
+          <button type="button" class="btn btn-block" id="go-temperature">Explore cooling along the street ↓</button>
         </div>
-        <p class="scope-note">Early planning estimate. Positions still need a site assessment, including underground utilities and root space.</p>
+        <details class="result-details"><summary>Plan details and actions</summary><div class="details-body">
+          <p id="result-reading" class="result-reading"></p>
+          <p class="hint" id="result-growth"></p>
+          <p class="hint" id="result-sidewalk"></p>
+          <div id="flag-summary" class="flag-summary" hidden></div>
+          <p id="plan-rule-basis" class="scope-note"></p>
+          <details id="review-checks"><summary>Why are positions flagged?</summary><div id="review-reasons" class="review-reasons"></div></details>
+          <div id="try-alternatives" hidden>
+            <p class="field-label">Try a different plan</p>
+            <div class="chips" id="plan-alternatives"></div>
+          </div>
+          <p id="result-guidance" class="hint"></p>
+          <div class="result-actions">
+            <button type="button" class="btn btn-block" id="copy-brief">Copy a short briefing</button>
+            <button type="button" class="btn btn-block" id="view-plan">Show trees on the map</button>
+            <button type="button" class="btn btn-ghost btn-block" id="edit-restrictions">Edit planting restrictions</button>
+          </div>
+        </div></details>
+        <p class="scope-note">Preliminary plan · positions need a site assessment.</p>
       </div>
     </section>
 
-    <details class="panel card temperature-card disclosure" id="temperature-card" hidden>
-      <summary class="card-head"><h2 class="card-title" id="temperature-title"><span class="step-number">5</span> Compare temperatures</h2></summary>
-      <p class="hint">Compare the current trees with your proposed plan under the same summer weather.</p>
-      <p class="temperature-notice">Exploratory air-temperature estimate. Not validated for this street.</p>
+    <details class="panel card temperature-card disclosure" id="temperature-card" open hidden>
+      <summary class="card-head"><h2 class="card-title" id="temperature-title">Cooling along the street</h2></summary>
+      <p class="hint">See where new trees could make the biggest difference.</p>
+      <details id="temperature-settings" open>
+      <summary id="temperature-settings-summary">Comparison settings</summary>
       <form id="temperature-form" class="card-body">
-        <div class="field">
-          <label class="field-label" for="reference-air">Current-street air temperature (°C)</label>
-          <input id="reference-air" class="input" type="number" min="0" max="55" step="0.1" value="30" required aria-describedby="temperature-input-help">
-          <p class="hint" id="temperature-input-help">Enter a measurement or try a reference value. The default 30°C is an example, not live weather.</p>
-        </div>
         <div class="temperature-inputs">
+          <div class="field">
+            <label class="field-label" for="reference-air">Starting air temperature</label>
+            <div class="input-unit"><input id="reference-air" class="input" type="number" min="0" max="55" step="0.1" value="30" required aria-describedby="temperature-input-help"><span aria-hidden="true">°C</span></div>
+          </div>
           <div class="field"><label class="field-label" for="temperature-year">Years after planting</label><input id="temperature-year" class="input" type="number" min="0" max="30" step="1" value="30" required></div>
-          <div class="field"><label class="field-label" for="temperature-hour">Local hour for shade</label><input id="temperature-hour" class="input" type="number" min="6" max="18" step="0.5" value="15" required></div>
         </div>
-        <details><summary>Summer date for the shade comparison</summary>
+        <p class="hint" id="temperature-input-help">30°C is an example. Use a measurement if available.</p>
+        <details class="shade-options"><summary>Shade date and time</summary>
           <div class="temperature-inputs details-body">
             <div class="field"><label class="field-label" for="temperature-month">Month</label><select id="temperature-month" class="select"><option value="6">June</option><option value="7" selected>July</option><option value="8">August</option></select></div>
             <div class="field"><label class="field-label" for="temperature-day">Day</label><input id="temperature-day" class="input" type="number" min="1" max="31" step="1" value="15" required></div>
+            <div class="field"><label class="field-label" for="temperature-hour">Local hour</label><input id="temperature-hour" class="input" type="number" min="6" max="18" step="0.5" value="15" required></div>
           </div>
         </details>
         <p id="temperature-status" class="hint" role="status" aria-live="polite">Choose a street and create a plan first.</p>
-        <button id="temperature-btn" class="btn btn-primary btn-block" type="submit" disabled>Compare temperatures</button>
+        <button id="temperature-btn" class="btn btn-primary btn-block" type="submit" disabled>Calculate cooling</button>
       </form>
+      </details>
       <div id="temperature-result" hidden aria-live="polite">
         <p id="temperature-context" class="result-name"></p>
-        <div class="temperature-values">
-          <div><span>Current trees · your input</span><strong id="temperature-before"></strong></div>
-          <div><span>With this plan · estimate</span><strong id="temperature-after"></strong></div>
+        <div class="temperature-reading">
+          <h3 id="temperature-location">Street average</h3>
+          <p id="temperature-delta" class="temperature-delta"></p>
+          <p class="temperature-delta-label">estimated air cooling</p>
+          <div class="temperature-values">
+            <div><span>Before · your input</span><strong id="temperature-before"></strong></div>
+            <span class="temperature-arrow" aria-hidden="true">→</span>
+            <div><span>After · estimate</span><strong id="temperature-after"></strong></div>
+          </div>
         </div>
-        <p id="temperature-delta" class="temperature-delta"></p>
-        <p id="temperature-range" class="hint"></p>
-        <p id="temperature-shade" class="hint"></p>
-        <button type="button" class="btn btn-block" id="temperature-map">Show this plan’s shade on the map</button>
+        <p id="temperature-local-note" class="hint">Cooling varies with nearby canopy. Each point uses the same starting air temperature.</p>
+        <div class="temperature-location-control">
+          <label class="field-label" for="temperature-point">Explore a location</label>
+          <select class="select" id="temperature-point"><option value="">Street average</option></select>
+        </div>
+        <div class="temperature-profile" id="temperature-profile" aria-label="Cooling at points along the street"></div>
+        <div class="temperature-map-actions">
+          <button type="button" class="btn btn-primary btn-block" id="temperature-view">Show cooling on map</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="temperature-average">Street average</button>
+        </div>
+        <p class="temperature-notice">Illustrative estimate · not a local temperature forecast.</p>
+        <div class="temperature-shade-summary">
+          <p id="temperature-shade" class="hint"></p>
+          <button type="button" class="btn btn-sm" id="temperature-map">Show tree shade</button>
+        </div>
         <details class="temperature-method"><summary>How this estimate works</summary>
+          <p id="temperature-range" class="hint"></p>
           <p id="temperature-canopy" class="hint"></p>
           <p class="hint">A daytime association from a 2022 Tacoma study is applied to the added canopy within 10 m of sampled sidewalk points: 0.005°C per added percentage point. The 0–0.009°C sensitivity slopes come from the published coefficient endpoints.</p>
           <a href="https://www.nature.com/articles/s41598-024-51921-y/tables/1" target="_blank" rel="noopener noreferrer">Research source · Scientific Reports, 2024, Table 1</a>
@@ -228,26 +222,53 @@
       </div>
     </details>
 
-    <section class="panel card" id="plans-card" aria-labelledby="scenarios-title" hidden>
-      <header class="card-head">
+    <details class="panel card disclosure" id="rules-card" aria-labelledby="rules-title" hidden>
+      <summary class="card-head">
+        <h2 class="card-title" id="rules-title">Planting restrictions</h2>
+        <span class="card-meta mono" id="rules-meta"></span>
+      </summary>
+      <p class="hint">Required limits exclude a position. Recommended limits flag it for review.</p>
+      <div class="restriction-summary" id="rules-summary" aria-label="Current restrictions"></div>
+      <p class="card-note" id="rules-source"></p>
+      <p class="hint is-pending-note" id="rules-pending" hidden></p>
+      <details class="restriction-editor" id="rules-editor">
+        <summary>Edit distances and required / recommended</summary>
+        <div id="rules">
+          <h3 class="restriction-group">Cited standard</h3>
+          <ul class="restriction-list" id="rules-standard"></ul>
+          <h3 class="restriction-group">Planning defaults</h3>
+          <p class="hint">Editable starting points for this tool, not part of the cited standard.</p>
+          <ul class="restriction-list" id="rules-defaults"></ul>
+        </div>
+      </details>
+      <details class="locked-rules" id="locked-rules-details">
+        <summary>Always applied · cannot be turned off</summary>
+        <ul class="locked-list" id="locked-rules"></ul>
+      </details>
+      <div class="card-foot">
+        <button class="btn btn-ghost btn-sm" id="rules-reset" type="button">Restore default restrictions</button>
+        <button class="btn btn-sm" id="goto-trees" type="button">Adjust the trees</button>
+      </div>
+    </details>
+
+    <details class="panel card disclosure" id="plans-card" aria-labelledby="scenarios-title" hidden>
+      <summary class="card-head">
         <h2 class="card-title" id="scenarios-title">Your plans</h2>
         <span class="card-meta mono" id="scenarios-meta"></span>
-      </header>
+      </summary>
       <div class="scenarios" id="scenarios"></div>
       <p class="hint" id="compare-help">Create at least two plans for the same street to compare.</p>
-      <p class="hint">Plans are kept until you refresh this page.</p>
       <div class="card-foot">
         <button class="btn btn-sm" id="compare-btn" type="button" disabled>Compare plans</button>
         <a class="btn btn-sm btn-ghost" id="export-link" href="#" download aria-disabled="true">Download map data</a>
       </div>
-    </section>
+    </details>
   </div>
 
 </div>
 <section class="map-workspace" aria-label="Explore your tree plan">
   <div class="map-toolbar panel">
     <div>
-      <p class="eyebrow">Your street, over time</p>
       <p id="map-hint">Explore a street to see possible tree positions.</p>
       <div class="map-key" id="map-key" hidden aria-label="Tree markers">
         <div class="map-key-kinds">
@@ -274,6 +295,16 @@
   </div>
 <div id="map" tabindex="0" role="application" aria-label="Map of the planned street"></div>
 
+<div class="panel temperature-map-key" id="temperature-map-key" hidden role="region" aria-label="Estimated cooling on the map">
+  <div class="temperature-map-key-head">
+    <p id="temperature-map-caption">Estimated air cooling · year 30</p>
+    <button type="button" class="btn btn-sm" id="temperature-map-close">Back to trees</button>
+  </div>
+  <div class="temperature-color-scale" aria-hidden="true"></div>
+  <div class="temperature-scale-labels"><span>0°C</span><span>0.5°C less</span></div>
+  <p class="hint">Select a point to see its estimated cooling.</p>
+</div>
+
 <!-- Bottom-centre dock: year slider, growth animation, shade toggle -->
 <div class="dock-wrap" id="growth-dock" hidden>
   <div class="panel dock" role="group" aria-label="Year and shade">
@@ -298,11 +329,10 @@
 
   <details class="panel legend" id="map-layers">
     <summary class="card-head legend-head">
-      <h2 class="card-title" id="legend-title">Map layers & key</h2>
+      <h2 class="card-title" id="legend-title">Map layers</h2>
 
     </summary>
-    <p class="map-color-note">Brown squares are existing trees. Green, amber and red rings are proposed positions. Translucent circles show crown size. Amber rings need review but are included; red rings add no canopy or cooling.</p>
-    <p class="map-color-note">New trees stay at least 10 m from mapped junctions and crossings, and off mapped parking bays. Unmapped crossings still need site review.</p>
+    <p class="map-color-note">Squares: existing trees. Rings: proposed positions. Red positions are excluded from canopy and cooling estimates.</p>
     <div class="seg seg-sm" id="basemaps" role="group" aria-label="Basemap"></div>
     <ul class="legend-list">
       <li class="legend-item">
@@ -405,6 +435,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
-<script src="/static/app.js?v=plan-delta"></script>
+<script src="/static/app.js?v=auto-constraints"></script>
 </body>
 </html>
