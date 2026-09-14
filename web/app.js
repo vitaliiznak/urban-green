@@ -37,6 +37,7 @@
     invalid: { label: 'Required rule not met', explanation: 'At least one required rule failed. This position is excluded from the proposed trees and their projected canopy.' },
   };
   const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const MOBILE_LAYOUT = window.matchMedia('(max-width: 700px)');
   const emptyFc = () => ({ type: 'FeatureCollection', features: [] });
 
   const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -67,7 +68,11 @@
     scenarios: [],                // ScenarioResponse, insertion order
     activeScenarioId: null,
     siteIndex: new Map(),         // site_id -> decorated Feature of the active scenario
+    treeFilter: 'passing',
+    workspaceView: 'trees',
+    mobileMap: false,
     pack: null,                   // active RulePack (with session overrides)
+    ruleOverrides: {},
     year: MAX_YEAR,
     anim: 0,                      // requestAnimationFrame handle of the growth animation
     ppm0: 0,                      // pixels per metre at zoom 0 for the current centre latitude
@@ -110,6 +115,207 @@
   }
 
   const motionMs = (ms) => (REDUCED_MOTION.matches ? 0 : ms);
+
+  // Undo stores immutable plan responses and exact session overrides, not just map pixels.
+  const history = { current: null, past: [], future: [], pending: null, timer: 0, restoring: false, message: '' };
+  const temperatureInputIds = ['reference-air', 'temperature-year', 'temperature-month', 'temperature-day', 'temperature-hour'];
+  const planInputIds = ['spacing', 'species', 'crown-size', 'label'];
+  const clone = value => structuredClone(value);
+  const valuesOf = ids => Object.fromEntries(ids.map(id => [id, $(id).value]));
+  function historyBusy() {
+    return state.loadingStreet || state.planning || state.updatingRules || state.agent.streaming
+      || state.autoApply.running || state.autoApply.pending || state.temperature.pending || Boolean(state.anim);
+  }
+
+  function workspaceSnapshot() {
+    return {
+      street: state.street, scenarios: [...state.scenarios], activeId: state.activeScenarioId,
+      cityId: state.cityId, basemapId: state.basemapId, pack: clone(state.pack), overrides: clone(state.ruleOverrides),
+      inputs: valuesOf(planInputIds), side: ui.planForm.elements.side.value, mode: ui.planForm.elements.mode.value,
+      ruleValues: Object.fromEntries([...ui.rules.querySelectorAll('.restriction')].map(row => [row.id, {
+        distance: row.querySelector('input[type="number"]')?.value,
+        enabled: row.querySelector('input[type="checkbox"]').checked,
+        mode: row.querySelector('input[type="radio"]:checked')?.value,
+      }])),
+      failed: state.autoApply.failed, dirty: state.dirty, pendingRules: clone(state.autoApply.rules),
+      filter: state.treeFilter, layers: Object.fromEntries(ui.legendToggles.map(cb => [cb.dataset.layer, cb.checked])),
+      view: state.workspaceView, mobileMap: state.mobileMap, year: state.year,
+      shade: { enabled: state.shade.enabled, when: { ...state.shade.when }, result: state.shade.result },
+      temperature: { inputs: valuesOf(temperatureInputIds), result: state.temperature.result,
+        selectedId: state.temperature.selectedId, mapVisible: state.temperature.mapVisible },
+      draw: { active: state.draw.active, points: clone(state.draw.points) }, picking: state.pickingStreet,
+      camera: { center: map.getCenter().toArray(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch(), padding: map.getPadding() },
+    };
+  }
+
+  function snapshotKey(snapshot) {
+    const { street, scenarios, pack, shade, temperature, camera, ...rest } = snapshot;
+    return JSON.stringify({ ...rest, street: street?.street_id, scenarios: scenarios.map(sc => sc.scenario_id),
+      shade: { enabled: shade.enabled, when: shade.when },
+      temperature: { ...temperature, result: temperature.result ? [temperature.result.scenario_id, temperature.result.year, temperature.result.reference_air_c] : null },
+      camera: { center: camera.center.map(n => +n.toFixed(6)), zoom: +camera.zoom.toFixed(3), bearing: camera.bearing, pitch: camera.pitch },
+    });
+  }
+
+  function renderHistory() {
+    const busy = historyBusy() || history.restoring;
+    $('undo-change').disabled = busy || (!history.past.length && !history.pending);
+    $('redo-change').disabled = busy || Boolean(history.pending) || !history.future.length;
+    const undo = history.pending || history.past.at(-1)?.label;
+    const redo = history.future.at(-1)?.label;
+    $('undo-change').title = undo ? `Undo: ${undo}` : 'Nothing to undo';
+    $('redo-change').title = redo ? `Redo: ${redo}` : 'Nothing to redo';
+    $('history-status').textContent = history.restoring ? 'Restoring…' : history.message;
+  }
+
+  function queueHistory(label) {
+    if (!history.current || history.restoring) return;
+    history.pending ||= label;
+    history.message = '';
+    clearTimeout(history.timer);
+    history.timer = setTimeout(commitHistory, 300);
+    renderHistory();
+  }
+
+  function commitHistory() {
+    clearTimeout(history.timer);
+    if (!history.pending || history.restoring) return;
+    if (historyBusy() || map.isMoving()) { history.timer = setTimeout(commitHistory, 100); return; }
+    const next = workspaceSnapshot();
+    if (snapshotKey(next) !== snapshotKey(history.current)) {
+      history.past.push({ snapshot: history.current, label: history.pending });
+      if (history.past.length > 40) history.past.shift();
+      history.current = next;
+      history.future = [];
+    }
+    history.pending = null;
+    renderHistory();
+  }
+
+  async function restoreWorkspace(snapshot) {
+    // Rule updates are serialized. Never race an old PUT against the replacement.
+    if (state.autoApply.failed || snapshot.failed || JSON.stringify(state.ruleOverrides) !== JSON.stringify(snapshot.overrides)) {
+      const res = await api('/api/rules/overrides', { method: 'PUT', body: snapshot.overrides });
+      state.ruleOverrides = res.overrides;
+    }
+    stopAnimation();
+    cancelAutoApply();
+    setShadeEnabled(false);
+    invalidateTemperature();
+    if (state.draw.active) stopDraw();
+    state.scenarios = [...snapshot.scenarios];
+    selectCity(snapshot.cityId, { silent: true });
+    if (snapshot.street) applyStreet(snapshot.street, { fit: false });
+    else selectCity(snapshot.cityId);
+    setRulePack(clone(snapshot.pack));
+    if (snapshot.activeId) selectScenario(snapshot.activeId);
+    for (const [id, value] of Object.entries(snapshot.inputs)) $(id).value = value;
+    for (const name of ['side', 'mode']) ui.planForm.querySelector(`input[name="${name}"][value="${snapshot[name]}"]`).checked = true;
+    ui.spacingOut.textContent = `${fmt.num(ui.spacing.value, 1)} m`;
+    renderSpeciesHint();
+    for (const [id, draft] of Object.entries(snapshot.ruleValues)) {
+      const row = $(id);
+      if (!row) continue;
+      const input = row.querySelector('input[type="number"]');
+      if (input) input.value = draft.distance;
+      row.querySelector('input[type="checkbox"]').checked = draft.enabled;
+      row.classList.toggle('off', !draft.enabled);
+      for (const radio of row.querySelectorAll('input[type="radio"]')) radio.checked = radio.value === draft.mode;
+      for (const control of row.querySelectorAll('input:not([type="checkbox"])')) control.disabled = !draft.enabled;
+    }
+    state.autoApply.failed = snapshot.failed;
+    state.autoApply.rules = clone(snapshot.pendingRules);
+    state.dirty = snapshot.dirty;
+    state.treeFilter = snapshot.filter;
+    for (const [key, visible] of Object.entries(snapshot.layers)) setLayerVisible(key, visible);
+    setBasemap(cityById(snapshot.cityId), snapshot.basemapId);
+    setYear(snapshot.year);
+    state.shade.when = { ...snapshot.shade.when };
+    state.shade.enabled = snapshot.shade.enabled;
+    ui.shade.setAttribute('aria-pressed', String(snapshot.shade.enabled));
+    ui.shade.lastChild.textContent = snapshot.shade.enabled ? 'Hide shade' : 'Show shade';
+    map.setLayoutProperty('shade-fill', 'visibility', snapshot.shade.enabled ? 'visible' : 'none');
+    if (snapshot.shade.result) applyShade(snapshot.shade.result);
+    for (const [id, value] of Object.entries(snapshot.temperature.inputs)) $(id).value = value;
+    if (snapshot.temperature.result) {
+      renderTemperatureResult(snapshot.temperature.result);
+      selectTemperaturePoint(snapshot.temperature.selectedId);
+    }
+    state.workspaceView = snapshot.view;
+    setTemperatureMapVisible(snapshot.temperature.mapVisible);
+    if (snapshot.draw.active) startDraw(); else stopDraw();
+    state.draw.points = clone(snapshot.draw.points);
+    renderDraw();
+    setStreetPicking(snapshot.picking);
+    setMobileMap(snapshot.mobileMap);
+    applyTreeFilters();
+    renderScenarios();
+    clearError();
+    renderWorkflow();
+    map.jumpTo(snapshot.camera);
+    if (snapshot.shade.enabled && !snapshot.shade.result) fetchShade();
+  }
+
+  async function stepHistory(direction) {
+    if (history.restoring || historyBusy() || !ui.compareModal.hidden) return;
+    map.stop();
+    commitHistory();
+    const from = direction === 'undo' ? history.past : history.future;
+    const to = direction === 'undo' ? history.future : history.past;
+    const entry = from.at(-1);
+    if (!entry) return;
+    history.restoring = true;
+    renderWorkflow();
+    try {
+      await restoreWorkspace(entry.snapshot);
+      from.pop();
+      to.push({ snapshot: history.current, label: entry.label });
+      history.current = entry.snapshot;
+      history.message = `${direction === 'undo' ? 'Undid' : 'Redid'} ${entry.label.toLowerCase()}.`;
+    } catch (err) {
+      history.message = `Could not ${direction}: ${err.message}. Try again.`;
+    } finally {
+      history.restoring = false;
+      renderWorkflow();
+    }
+  }
+
+  function wireHistory() {
+    $('undo-change').addEventListener('click', () => stepHistory('undo'));
+    $('redo-change').addEventListener('click', () => stepHistory('redo'));
+    const record = event => {
+      const target = event.target;
+      if (!(target instanceof Element) || target.closest('#undo-change, #redo-change')) return;
+      if (target.closest('#plan-form')) queueHistory('Tree settings');
+      else if (target.closest('#rules-card')) queueHistory('Planting restrictions');
+      else if (target.closest('#temperature-form')) queueHistory('Cooling inputs');
+      else if (target.closest('#temperature-card')) queueHistory('Cooling view');
+      else if (target.closest('#search-form, #city, #demo-chips')) queueHistory('Street selection');
+      else if (target.closest('#scenarios, #duplicate-plan, #plan-alternatives')) queueHistory('Plan selection');
+      else if (target.closest('#show-passing-locations, #tree-preset, #new-tree-filter, #show-existing-trees, #show-new-trees, #legend-title, .legend-item, #basemaps')) queueHistory('Map filters');
+      else if (target.closest('#year, #play, #shade')) queueHistory('Tree growth or shade');
+      else if (target.closest('#draw, #draw-actions, #choose-on-map, #pick-street') || (target.closest('#map') && (state.draw.active || state.pickingStreet))) queueHistory('Street selection');
+      else if (target.closest('.temperature-profile-point, .temperature-highlight, #temperature-average, #map')) queueHistory('Map location');
+      else if (target.closest('#go-temperature, #trees-view, #temperature-map-close, #temperature-view, #temperature-map, #view-plan, #show-existing, #fit-street, #mobile-map, #mobile-plan, #review-reasons, #flag-summary')) queueHistory('Map view');
+      else if (target.closest('#chat-form, #prompt-chips')) queueHistory('Assistant changes');
+    };
+    for (const type of ['click', 'input', 'change', 'submit']) document.addEventListener(type, record, true);
+    for (const type of ['wheel', 'touchmove']) ui.map.addEventListener(type, () => queueHistory('Map location'), { capture: true, passive: true });
+    document.addEventListener('pointerdown', () => {
+      if (history.pending && !historyBusy() && !history.restoring) commitHistory();
+    }, true);
+    document.addEventListener('keydown', event => {
+      if (event.target.closest('#map') && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '-', '='].includes(event.key)) queueHistory('Map location');
+      if (event.key === 'Escape' && ui.compareModal.hidden && ui.agent.hidden
+          && (state.draw.active || state.pickingStreet || state.temperature.mapVisible)) queueHistory('Map view');
+      if (!ui.compareModal.hidden) return;
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        stepHistory(event.shiftKey || event.key.toLowerCase() === 'y' ? 'redo' : 'undo');
+      }
+    });
+  }
 
   // ------------------------------------------------------------ HTTP
   let cachedSid = null;
@@ -460,8 +666,10 @@
     map.addLayer({
       id: 'sites', type: 'circle', source: 'sites',
       paint: {
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 1.5, 15, 3, 17, 5, 19, 6],
-        'circle-color': C.ground,
+        'circle-radius': ['interpolate', ['linear'], ['zoom'],
+          13, ['case', ['==', ['get', 'all_checks_passed'], true], 6, 1.5],
+          15, ['case', ['==', ['get', 'all_checks_passed'], true], 7, 3], 17, 7, 19, 8],
+        'circle-color': ['case', ['==', ['get', 'all_checks_passed'], true], C.valid, C.ground],
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 13, 0.8, 15, 1.4, 17, 2],
         'circle-stroke-color': ['match', ['get', 'verdict'], 'valid', C.valid, 'conditional', C.cond, C.invalid],
       },
@@ -511,6 +719,145 @@
     for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
     const box = ui.legendToggles.find((cb) => cb.dataset.layer === key);
     if (box) box.checked = Boolean(visible);
+    if (['existing_trees', 'sites', 'crowns'].includes(key)) {
+      hideHover();
+      if (state.pinPopup) state.pinPopup.remove();
+      applyTreeFilters();
+    }
+  }
+
+  const layerChecked = (key) => Boolean(ui.legendToggles.find(cb => cb.dataset.layer === key)?.checked);
+
+  function matchesTreeFilter(properties) {
+    if (state.treeFilter === 'passing') return properties.all_checks_passed;
+    if (state.treeFilter === 'review') return properties.verdict !== 'invalid' && !properties.all_checks_passed;
+    if (state.treeFilter === 'excluded') return properties.verdict === 'invalid';
+    return true;
+  }
+
+  /** Filter display layers only; retain full scenario geometry and plan calculations. */
+  function applyTreeFilters() {
+    const filter = state.treeFilter === 'passing' ? ['==', ['get', 'all_checks_passed'], true]
+      : state.treeFilter === 'review' ? ['all', ['!=', ['get', 'verdict'], 'invalid'], ['!=', ['get', 'all_checks_passed'], true]]
+      : state.treeFilter === 'excluded' ? ['==', ['get', 'verdict'], 'invalid'] : null;
+    for (const id of ['sites', 'sites-ring']) if (map.getLayer(id)) map.setFilter(id, filter);
+    const planted = ['!=', ['get', 'verdict'], 'invalid'];
+    if (map.getLayer('crowns')) map.setFilter('crowns', filter ? ['all', planted, filter] : planted);
+
+    const existing = layerChecked('existing_trees');
+    const proposed = layerChecked('sites') || layerChecked('crowns');
+    const matchingChecks = Array.from(state.siteIndex.values()).filter(f => matchesTreeFilter(f.properties));
+    const matches = matchingChecks.filter(f => layerChecked('sites') || f.properties.verdict !== 'invalid');
+    const visibleIds = proposed ? matches.map(f => f.properties.site_id) : [];
+    if (map.getLayer('shade-fill')) map.setFilter('shade-fill', ['any',
+      ['all', ['==', ['get', 'kind'], 'existing'], existing],
+      ['all', ['==', ['get', 'kind'], 'new'], ['in', ['get', 'site_id'], ['literal', visibleIds]]],
+    ]);
+    $('show-existing-trees').checked = existing;
+    $('show-new-trees').checked = proposed;
+    $('show-new-trees').indeterminate = layerChecked('sites') !== layerChecked('crowns');
+    $('show-new-trees').disabled = !activeScenario();
+    $('new-tree-filter').value = state.treeFilter;
+    $('new-tree-filter').disabled = !proposed || !activeScenario();
+    const allProposed = layerChecked('sites') && layerChecked('crowns');
+    $('tree-preset').value = existing && !proposed ? 'existing'
+      : allProposed && state.treeFilter === 'all' ? existing ? 'all' : 'new'
+      : allProposed && !existing && state.treeFilter === 'passing' ? 'passing' : 'custom';
+    const passingView = $('tree-preset').value === 'passing';
+    $('passing-caveat').hidden = !passingView;
+    const passingCount = Array.from(state.siteIndex.values()).filter(f => f.properties.all_checks_passed).length;
+    $('passing-count').textContent = fmt.int(passingCount);
+    const disabledChecks = state.pack?.rules.filter(rule => !rule.enabled).length || 0;
+    $('passing-caveat').textContent = disabledChecks
+      ? `Pass enabled checks only · ${disabledChecks} checks off · site confirmation needed`
+      : 'Pass current checks · site confirmation needed';
+    const existingCount = existing ? state.street?.stats?.existing_trees || 0 : 0;
+    const newCount = proposed ? matches.length : 0;
+    const counts = [];
+    if (proposed) counts.push(passingView ? `${newCount} passing candidates shown` : `${newCount} of ${state.siteIndex.size} new positions`);
+    if (existing) counts.push(`${existingCount} existing`);
+    $('tree-filter-count').textContent = counts.length ? counts.join(' · ') : 'All trees hidden';
+    const filtered = state.treeFilter !== 'all' || !existing || !proposed;
+    $('tree-filter-note').hidden = !filtered || (passingView && newCount > 0);
+    $('tree-filter-note').textContent = proposed && newCount === 0
+      ? matchingChecks.length ? 'Enable proposed positions in Map layers to see these sites.'
+        : passingView ? 'No candidates pass every enabled check. Unknown or failed checks are excluded.'
+          : 'No new positions match. Try another filter. Plan totals unchanged.'
+      : 'Map display only · plan totals unchanged.';
+    renderPassingControl();
+  }
+
+  function passingLocationsVisible() {
+    return state.treeFilter === 'passing' && !layerChecked('existing_trees') && layerChecked('sites') && layerChecked('crowns')
+      && !state.temperature.mapVisible && !state.draw.active && !state.pickingStreet;
+  }
+
+  function renderPassingControl() {
+    const planViewOnPhone = MOBILE_LAYOUT.matches && !state.mobileMap;
+    const active = passingLocationsVisible();
+    const button = $('show-passing-locations');
+    if (planViewOnPhone) button.removeAttribute('aria-pressed');
+    else button.setAttribute('aria-pressed', String(active));
+    $('passing-toggle-state').textContent = planViewOnPhone ? 'View map' : active ? 'On' : 'Off';
+    button.title = planViewOnPhone ? 'Show passing locations on the map' : active ? 'Show all trees' : 'Show only passing trees';
+    const count = Array.from(state.siteIndex.values()).filter(f => f.properties.all_checks_passed).length;
+    $('passing-empty').hidden = !active || planViewOnPhone || count > 0 || !activeScenario();
+  }
+
+  function changeTreeFilter(value) {
+    setTemperatureMapVisible(false);
+    state.treeFilter = value;
+    hideHover();
+    if (state.pinPopup) state.pinPopup.remove();
+    applyTreeFilters();
+  }
+
+  function applyTreePreset(preset) {
+    if (preset === 'custom') return;
+    state.treeFilter = preset === 'passing' ? 'passing' : 'all';
+    setLayerVisible('existing_trees', preset === 'all' || preset === 'existing');
+    setLayerVisible('sites', preset !== 'existing');
+    setLayerVisible('crowns', preset !== 'existing');
+  }
+
+  function showPassingLocations() {
+    if (!activeScenario() || $('show-passing-locations').disabled) return;
+    const showAll = (!MOBILE_LAYOUT.matches || state.mobileMap) && passingLocationsVisible();
+    if (state.draw.active) stopDraw();
+    setStreetPicking(false);
+    setWorkspaceView('trees');
+    applyTreePreset(showAll ? 'all' : 'passing');
+    revealMap();
+    const features = Array.from(state.siteIndex.values()).filter(f => f.properties.all_checks_passed);
+    fitToBbox((!showAll && bboxOfPoints({ features })) || state.street.bbox);
+  }
+
+  function setMobileMap(visible) {
+    state.mobileMap = visible;
+    document.body.classList.toggle('mobile-map-visible', visible);
+    $('mobile-map').setAttribute('aria-pressed', String(visible));
+    $('mobile-plan').setAttribute('aria-pressed', String(!visible));
+    map.resize();
+    renderPassingControl();
+  }
+
+  function revealMap() {
+    setMobileMap(true);
+    ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+  }
+
+  function setWorkspaceView(view) {
+    state.workspaceView = view;
+    if (view === 'trees') setTemperatureMapVisible(false);
+    else if (state.temperature.result) setTemperatureMapVisible(true);
+    renderWorkflow();
+  }
+
+  function openCooling() {
+    setWorkspaceView('cooling');
+    setMobileMap(false);
+    $('view-switcher').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'nearest' });
+    if (!state.temperature.result) compareTemperature();
   }
 
   function firstOverlayLayerId() {
@@ -542,9 +889,11 @@
 
   /** Padding that keeps the fitted street clear of the floating panels. */
   function fitPadding() {
+    const floatingHeight = $('passing-control').hidden ? 0 : $('passing-control').offsetHeight;
+    const contextHeight = $('map-context').hidden ? 0 : $('map-context').offsetHeight;
     return {
-      top: document.querySelector('.map-toolbar').offsetHeight + 36,
-      left: 30, right: 30, bottom: (state.temperature.mapVisible ? $('temperature-map-key').offsetHeight : ui.dock.offsetHeight) + 60,
+      top: floatingHeight + contextHeight + (floatingHeight && contextHeight ? 12 : 0) + 36,
+      left: 30, right: 30, bottom: (state.temperature.mapVisible ? $('temperature-map-key').offsetHeight : 0) + 60,
     };
   }
 
@@ -722,13 +1071,19 @@
   function focusSite(siteId, zoom, preferredRuleId) {
     const f = siteFeature(siteId);
     if (!f) return false;
-    setTemperatureMapVisible(false);
+    setWorkspaceView('trees');
+    revealMap();
+    // An explicit inspection should reveal the requested position even when filtered out.
+    if (!matchesTreeFilter(f.properties)) changeTreeFilter('all');
+    setLayerVisible('sites', true);
     map.easeTo({ center: f.geometry.coordinates, zoom: Math.max(map.getZoom(), zoom || 18), duration: motionMs(700) });
     pinPopup(f.geometry.coordinates, siteCard(f.properties, preferredRuleId));
     return true;
   }
 
   function wireMapEvents() {
+    map.on('movestart', event => { if (event.originalEvent) queueHistory('Map location'); });
+    map.on('dragstart', () => queueHistory('Map location'));
     map.on('zoom', scheduleScale);
     map.on('move', scheduleScale);
     map.on('mouseenter', 'temperature-points', () => { map.getCanvas().style.cursor = 'pointer'; });
@@ -813,7 +1168,7 @@
     document.querySelector('.map-workspace').classList.add('is-drawing');
     ui.draw.textContent = 'Cancel drawing';
     ui.mapHint.textContent = 'Click at least two points on the map. Then choose Finish drawing. Escape cancels.';
-    ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+    revealMap();
     hideHover();
     renderWorkflow();
     renderDraw();
@@ -884,6 +1239,7 @@
       $('tree-evidence').hidden = true;
       $('street-picker').open = true;
       ui.streetMeta.textContent = '';
+      $('street-title').textContent = 'Choose a street';
       ui.search.value = '';
       Object.assign(state.status, { sources: [], estimated: [], warnings: [], notes: [], error: null });
       renderStatus();
@@ -952,6 +1308,8 @@
     setStreetPicking(false);
     $('street-picker').open = false;
     state.rulesEditorPinned = false;
+    state.workspaceView = 'trees';
+    setMobileMap(false);
     state.street = street;
     state.dirty = false;
     state.streets.set(street.street_id, street);
@@ -980,6 +1338,7 @@
 
   function renderStreetMeta(street) {
     const s = street.stats || {};
+    $('street-title').textContent = street.name || 'Selected street';
     ui.streetMeta.textContent = `${street.name || 'Street'} · ${fmt.grouped(street.length_m)} m`;
     $('tree-evidence').hidden = false;
     $('existing-tree-count').textContent = `${fmt.int(s.existing_trees)} existing trees loaded`;
@@ -1072,6 +1431,7 @@
       for (const [ruleId, patch] of Object.entries(patches)) {
         state.updatingRules = true;
         const res = await api(`/api/rules/${encodeURIComponent(state.pack.id)}/${encodeURIComponent(ruleId)}`, { method: 'PUT', body: patch });
+        state.ruleOverrides[ruleId] = { ...state.ruleOverrides[ruleId], ...patch };
         setRulePack(res.pack || withOverrides(state.pack, { [ruleId]: patch }), { render: false });
         delete patches[ruleId];
       }
@@ -1138,6 +1498,8 @@
       type: 'FeatureCollection',
       features: (fc.features || []).map((f) => {
         const p = { ...f.properties };
+        p.all_checks_passed = p.verdict === 'valid' && Array.isArray(p.rules) && p.rules.length > 0
+          && p.rules.every(rule => rule.passed === true);
         const byYear = p.crown_d_by_year || {};
         for (const y of YEARS) p[`c${y}`] = (Number(byYear[String(y)]) || 0) / 2;
         return { ...f, properties: p };
@@ -1171,6 +1533,7 @@
     const fc = decorateSites(sc.sites || emptyFc());
     state.siteIndex = new Map(fc.features.map((f) => [f.properties.site_id, f]));
     setSourceData('sites', fc);
+    applyTreeFilters();
     if (!state.street || state.street.street_id !== sc.street_id) fitToBbox(bboxOfPoints(fc));
     hideHover();
     if (state.pinPopup) state.pinPopup.remove();
@@ -1188,6 +1551,7 @@
     invalidateTemperature('Choose a street and create a plan first.');
     state.siteIndex = new Map();
     setSourceData('sites', emptyFc());
+    applyTreeFilters();
     invalidateShade();
     hideHover();
     if (state.pinPopup) state.pinPopup.remove();
@@ -1578,17 +1942,28 @@
 
   function renderWorkflow() {
     const applying = state.autoApply.pending || state.autoApply.running;
-    const busy = state.loadingStreet || state.planning || state.updatingRules || state.agent.streaming || applying;
-    const editingBusy = state.loadingStreet || state.agent.streaming || ((state.planning || state.updatingRules) && !state.autoApply.running);
+    const busy = state.loadingStreet || state.planning || state.updatingRules || state.agent.streaming || applying || history.restoring;
+    const editingBusy = history.restoring || state.loadingStreet || state.agent.streaming || ((state.planning || state.updatingRules) && !state.autoApply.running);
+    document.querySelector('.workspace').inert = history.restoring || !ui.compareModal.hidden;
     const rulesPending = activeScenario() && state.pack && JSON.stringify(state.pack.rules) !== JSON.stringify(activeScenario().rules_used?.rules);
     const hasPlan = Boolean(activeScenario());
-    $('settings-card').hidden = !state.street;
-    $('review-card').hidden = !hasPlan;
-    $('temperature-card').hidden = !hasPlan;
-    $('plans-card').hidden = !state.scenarios.length;
-    ui.rulesCard.hidden = !state.street;
+    $('show-passing-locations').disabled = busy || !hasPlan;
+    $('passing-control').hidden = !hasPlan;
+    $('map-context').hidden = hasPlan && !state.draw.active && !state.pickingStreet;
+    document.body.classList.toggle('has-tree-plan', hasPlan);
+    renderPassingControl();
+    const cooling = hasPlan && state.workspaceView === 'cooling';
+    $('view-switcher').hidden = !hasPlan;
+    $('trees-view').setAttribute('aria-pressed', String(!cooling));
+    $('go-temperature').setAttribute('aria-pressed', String(cooling));
+    $('go-temperature').disabled = busy || state.autoApply.failed || state.dirty || Boolean(rulesPending);
+    $('settings-card').hidden = !state.street || cooling;
+    $('review-card').hidden = !hasPlan || cooling;
+    $('temperature-card').hidden = !cooling;
+    $('plans-card').hidden = !state.scenarios.length || cooling;
+    ui.rulesCard.hidden = !state.street || cooling;
     if (ui.restrictionPreview) ui.restrictionPreview.hidden = Boolean(state.street);
-    document.querySelector('.data-details').hidden = !state.street;
+    document.querySelector('.data-details').hidden = !state.street || cooling;
     ui.fitStreet.hidden = !state.street;
     $('back-to-plan').textContent = state.temperature.mapVisible ? 'Cooling details' : state.street ? 'Back to settings' : 'Back to street selection';
     $('growth-dock').hidden = !hasPlan || state.draw.active || state.pickingStreet || state.temperature.mapVisible;
@@ -1602,7 +1977,6 @@
     for (const input of $('temperature-form').querySelectorAll('input, select')) input.disabled = busy || !activeScenario();
     $('temperature-map').disabled = busy || !state.temperature.result;
     $('temperature-view').disabled = busy || !state.temperature.result;
-    $('temperature-point').disabled = busy || !state.temperature.result;
     ui.city.disabled = busy || !state.config;
     ui.search.disabled = busy || !state.config;
     ui.searchBtn.disabled = busy || !state.config;
@@ -1611,7 +1985,8 @@
     $('street-selection-help').textContent = 'Click a street on the map, search by name, or draw your own section.';
     ui.draw.disabled = busy || !state.config;
     ui.draw.hidden = state.draw.active;
-    $('pick-street').hidden = state.draw.active;
+    $('pick-street').hidden = state.draw.active || (Boolean(state.street) && !state.pickingStreet);
+    $('choose-on-map').disabled = busy || !state.config;
     $('pick-street').disabled = busy || !state.config;
     $('pick-street').setAttribute('aria-pressed', String(state.pickingStreet));
     $('pick-street').textContent = state.loadingStreet && state.pickingStreet ? 'Finding street…' : state.pickingStreet ? 'Cancel street selection' : 'Select street on map';
@@ -1637,6 +2012,8 @@
     for (const chip of ui.promptChips.children) chip.disabled = busy;
     for (const input of ui.planForm.querySelectorAll('input, select')) input.disabled = editingBusy || !state.street;
     ui.planBtn.disabled = busy || !state.street;
+    ui.planBtn.hidden = hasPlan && !state.autoApply.failed;
+    $('duplicate-plan').disabled = busy || !hasPlan || state.autoApply.failed || state.dirty || Boolean(rulesPending);
     ui.planBtn.textContent = applying ? 'Updating plan…' : state.autoApply.failed || state.dirty || rulesPending ? 'Retry update' : 'Duplicate plan';
     ui.planBtn.classList.toggle('btn-primary', !hasPlan || state.autoApply.failed);
     if (!activeScenario() && !state.planning) ui.planBtn.textContent = 'Create tree plan';
@@ -1654,13 +2031,13 @@
       : state.street ? 'Street ready. Review the planting restrictions, then create a plan.' : 'Choose a street to start.';
     ui.planHint.textContent = state.autoApply.failed ? 'The map still shows the last completed plan. Check the values and retry.'
       : applying ? 'Changes apply automatically. Updating…'
-      : hasPlan ? 'Changes apply automatically. Duplicate a plan to keep a comparison.'
+      : hasPlan ? 'Changes apply automatically.'
       : 'Create a plan to check planting positions and estimate tree cover.';
     ui.planHint.hidden = !ui.planHint.textContent;
     ui.mapHint.textContent = state.loadingStreet && state.pickingStreet ? 'Finding the clicked street and loading its data…'
       : state.pickingStreet ? 'Click a street to start a plan.'
       : state.draw.active ? 'Click at least two points on the map. Then choose Finish drawing. Escape cancels.' : activeScenario()
-      ? state.temperature.mapVisible ? `${state.street.name} · Select a sidewalk point to see its cooling.` : `${state.street.name} · Click a tree to inspect it.`
+      ? state.temperature.mapVisible ? `${state.street.name} · Select a sidewalk point to see its cooling.` : 'Select a tree for details.'
       : 'Explore a street to see possible tree positions.';
     ui.workflowStatus.classList.toggle('is-pending', busy || state.dirty || Boolean(rulesPending));
     ui.workflowStatus.hidden = !busy && !state.dirty && !rulesPending && !state.status.error;
@@ -1673,6 +2050,7 @@
         ? `${fmt.int(sc.summary.planted)} proposed · ${fmt.pct(now)} → ${fmt.pct(later)} cover · Review ↓`
         : `${fmt.int(sc.summary.planted)} proposed · ${fmt.pct(later)} cover at 30 years · Review ↓`;
     }
+    renderHistory();
   }
 
   function toggleAssistant(open) {
@@ -1699,14 +2077,18 @@
 
   const temperatureSamples = () => state.temperature.result?.samples?.features || [];
   const temperatureLocation = (p) => `${p.side === 'left' ? 'Left' : 'Right'} sidewalk · ${fmt.int(p.station_m)} m from start`;
-  const coolingText = (value) => value > 0 ? `${fmt.num(value, 2)}°C cooler` : '0.00°C change';
+  const coolingText = (value) => {
+    if (!(value > 0)) return 'No change';
+    return value < 0.05 ? 'Under 0.1°C cooler' : `${fmt.num(value, 1)}°C cooler`;
+  };
+  const coolingColor = (value) => value >= 0.375 ? C.coolingHigh : value >= 0.125 ? C.coolingMid : C.coolingLow;
 
   function temperaturePointCard(p) {
     return el('div', { class: 'pop' }, [
       el('strong', { text: temperatureLocation(p) }),
       el('strong', { class: 'cooling-popup-value', text: coolingText(p.cooling_c) }),
-      el('span', { text: `${fmt.num(p.reference_air_c, 2)}°C input → ${fmt.num(p.proposed_air_c, 2)}°C estimated` }),
-      el('span', { class: 'hint', text: 'Air estimate from nearby canopy · not a measurement' }),
+      el('span', { text: `${fmt.num(p.reference_air_c, 1)}°C with current trees → ${fmt.num(p.proposed_air_c, 1)}°C with this plan` }),
+      el('span', { class: 'hint', text: `Canopy within 10 m: ${fmt.pct(p.existing_local_canopy_pct, 0)} → ${fmt.pct(p.proposed_local_canopy_pct, 0)} · estimate, not a measurement` }),
     ]);
   }
 
@@ -1745,7 +2127,7 @@
     if (state.draw.active) stopDraw();
     setStreetPicking(false);
     setTemperatureMapVisible(true);
-    ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+    revealMap();
     if (state.temperature.selectedId) selectTemperaturePoint(state.temperature.selectedId, { focusMap: true, pin: true });
     else fitToBbox(state.street.bbox);
   }
@@ -1764,16 +2146,19 @@
     if (pin && feature) pinPopup(feature.geometry.coordinates, temperaturePointCard(feature.properties));
   }
 
-  /** A small profile of real samples; the selector and map expose every point. */
+  /** One bar per sidewalk cross-section; when two pieces share a station, the cooler one stands for both. */
   function renderTemperatureProfile() {
     const samples = temperatureSamples();
     const length = Math.max(1, state.street.length_m);
-    $('temperature-point').replaceChildren(el('option', { value: '', text: 'Street average' }),
-      ...samples.map(f => el('option', { value: f.properties.sample_id, text: temperatureLocation(f.properties) })));
     const rows = ['left', 'right'].map(side => {
-      const sideSamples = samples.filter(f => f.properties.side === side).sort((a, b) => a.properties.station_m - b.properties.station_m);
+      const byStation = new Map();
+      for (const f of samples.filter(f => f.properties.side === side)) {
+        const key = Math.round(f.properties.station_m);
+        if (!byStation.has(key) || byStation.get(key).properties.cooling_c < f.properties.cooling_c) byStation.set(key, f);
+      }
+      const sideSamples = [...byStation.values()].sort((a, b) => a.properties.station_m - b.properties.station_m);
       if (!sideSamples.length) return null;
-      const count = Math.min(20, sideSamples.length);
+      const count = Math.min(24, sideSamples.length);
       const preview = Array.from({ length: count }, (_, i) => sideSamples[Math.round(i * (sideSamples.length - 1) / Math.max(1, count - 1))]);
       return el('div', { class: 'cooling-profile-row' }, [
         el('span', { class: 'hint', text: side === 'left' ? 'Left' : 'Right' }),
@@ -1783,14 +2168,35 @@
           return el('button', {
             type: 'button', class: 'temperature-profile-point', 'data-sample-id': p.sample_id,
             'aria-label': label, title: label, 'aria-pressed': 'false',
-            style: `--cooling-height: ${Math.max(5, Math.min(100, p.cooling_c / 0.5 * 100))}%; left: ${Math.max(0, Math.min(97, p.station_m / length * 97))}%`,
+            style: `--cooling-height: ${Math.max(6, Math.min(100, p.cooling_c / 0.5 * 100))}%; --cooling-color: ${coolingColor(p.cooling_c)}; left: ${Math.max(0, Math.min(97, p.station_m / length * 97))}%`,
             onclick: () => selectTemperaturePoint(p.sample_id, { focusMap: true, pin: true }),
           });
         })),
       ]);
     }).filter(Boolean);
     $('temperature-profile').replaceChildren(...rows,
-      el('p', { class: 'hint cooling-profile-labels', text: 'Street start → end · taller bars = more cooling' }));
+      el('div', { class: 'cooling-profile-labels hint' }, [el('span', { text: 'Street start' }), el('span', { text: 'taller = more cooling' }), el('span', { text: 'End' })]));
+  }
+
+  /** Quick jumps: where the plan cools most, and how much of the sidewalk it leaves unchanged. */
+  function renderTemperatureHighlights() {
+    const samples = temperatureSamples();
+    const box = $('temperature-highlights');
+    if (!samples.length) { box.replaceChildren(); return; }
+    const best = samples.reduce((a, b) => (b.properties.cooling_c > a.properties.cooling_c ? b : a));
+    const unchanged = samples.filter(f => !(f.properties.cooling_c > 0)).length;
+    const chips = [];
+    if (best.properties.cooling_c > 0) {
+      chips.push(el('button', {
+        type: 'button', class: 'chip temperature-highlight', 'data-sample-id': best.properties.sample_id,
+        onclick: () => selectTemperaturePoint(best.properties.sample_id, { focusMap: true, pin: true }),
+      }, [el('strong', { text: `Most cooling · ${coolingText(best.properties.cooling_c)}` }), el('span', { text: temperatureLocation(best.properties) })]));
+    }
+    chips.push(el('span', { class: 'chip chip-static' }, [
+      el('strong', { text: unchanged ? `${unchanged} of ${samples.length} points unchanged` : 'Every sampled point gets cooler' }),
+      el('span', { text: unchanged ? 'no new canopy within 10 m' : 'new canopy within 10 m of each' }),
+    ]));
+    box.replaceChildren(...chips);
   }
 
   function renderTemperatureReading() {
@@ -1798,24 +2204,40 @@
     if (!result) return;
     const feature = temperatureSamples().find(f => f.properties.sample_id === state.temperature.selectedId);
     const p = feature ? feature.properties : result;
-    $('temperature-location').textContent = feature ? temperatureLocation(p) : 'Street average';
-    $('temperature-point').value = state.temperature.selectedId;
+    const input = `${fmt.num(result.reference_air_c, 1)}°C`;
+    $('temperature-location').textContent = feature ? temperatureLocation(p) : 'Whole street';
     $('temperature-average').hidden = !feature;
-    $('temperature-before').textContent = `${fmt.num(p.reference_air_c, 2)}°C`;
-    $('temperature-after').textContent = `${fmt.num(p.proposed_air_c, 2)}°C`;
+    $('temperature-before').textContent = `${fmt.num(p.reference_air_c, 1)}°C`;
+    $('temperature-after').textContent = `${fmt.num(p.proposed_air_c, 1)}°C`;
     $('temperature-delta').textContent = coolingText(p.cooling_c);
+    $('temperature-delta-label').textContent = feature ? 'estimated air cooling at this point' : 'estimated air cooling · average over the street';
     $('temperature-local-note').textContent = feature
-      ? 'Based on added canopy within 10 m of this point. The same input temperature is used at every point.'
-      : 'Cooling varies along the street. Select a sidewalk point below or on the map.';
-    $('temperature-range').textContent = `Sensitivity: ${fmt.num(p.cooling_low_c, 2)}–${fmt.num(p.cooling_high_c, 2)}°C cooler (${fmt.num(p.proposed_air_low_c, 2)}–${fmt.num(p.proposed_air_high_c, 2)}°C). Not a forecast interval; actual cooling can fall outside it.`;
+      ? `${input} is the temperature you entered for the whole street, so it is the same at every point. Only the cooling changes: it depends on how much canopy this plan adds within 10 m of the point.`
+      : `Average of ${result.sample_count} sidewalk points. Cooling is higher near new trees and zero where the plan adds no canopy, so explore points below or on the map.`;
+    $('temperature-map-hint').textContent = feature ? `${temperatureLocation(p)} · ${coolingText(p.cooling_c)}` : 'Click a sidewalk point to see its estimated cooling.';
+    $('temperature-range').textContent = `Sensitivity: ${fmt.num(p.cooling_low_c, 1)}–${fmt.num(p.cooling_high_c, 1)}°C cooler (${fmt.num(p.proposed_air_low_c, 1)}–${fmt.num(p.proposed_air_high_c, 1)}°C). Not a forecast interval; actual cooling can fall outside it.`;
     $('temperature-canopy').textContent = `${feature ? 'Canopy within 10 m of this point' : `Mean canopy around ${result.sample_count} sidewalk points`}: ${fmt.pct(p.existing_local_canopy_pct)} → ${fmt.pct(p.proposed_local_canopy_pct)}.`;
     $('temperature-shade').textContent = feature
       ? `Tree shade here: ${p.existing_tree_shade ? 'shaded' : 'unshaded'} → ${p.proposed_tree_shade ? 'shaded' : 'unshaded'} · ${result.when}`
       : `Sidewalk in tree shade: ${fmt.pct(result.existing_sidewalk_shade_pct)} → ${fmt.pct(result.proposed_sidewalk_shade_pct)} · ${result.when}`;
     $('temperature-map-caption').textContent = `Estimated air cooling · year ${result.year}`;
-    for (const button of $('temperature-profile').querySelectorAll('[data-sample-id]')) {
+    for (const button of document.querySelectorAll('#temperature-profile [data-sample-id], #temperature-highlights [data-sample-id]')) {
       button.setAttribute('aria-pressed', String(button.dataset.sampleId === state.temperature.selectedId));
     }
+  }
+
+  function renderTemperatureResult(result) {
+    state.temperature.result = result;
+    $('temperature-settings').open = false;
+    $('temperature-settings-summary').textContent = `Current trees at ${fmt.num(result.reference_air_c, 1)}°C · year ${result.year} · Edit`;
+    $('temperature-context').textContent = `Full plan · ${fmt.int(activeScenario().summary.planted)} proposed trees, including review positions. Not limited by the map filter.`;
+    setSourceData('temperature', result.samples);
+    renderTemperatureProfile();
+    renderTemperatureHighlights();
+    renderTemperatureReading();
+    $('temperature-limitations').replaceChildren(...result.limitations.map(text => el('li', { text })));
+    $('temperature-status').textContent = '';
+    $('temperature-result').hidden = false;
   }
 
   async function compareTemperature({ restore = null } = {}) {
@@ -1836,24 +2258,14 @@
     try {
       const result = await api('/api/temperature', { method: 'POST', body: params });
       if (seq !== state.temperature.seq || result.scenario_id !== state.activeScenarioId) return;
-      state.temperature.result = result;
-      $('temperature-settings').open = false;
-      $('temperature-settings-summary').textContent = `Settings · ${fmt.num(result.reference_air_c, 1)}°C · year ${result.year}`;
-      $('temperature-context').textContent = `${state.street.name} · year ${result.year}`;
-      setSourceData('temperature', result.samples);
-      renderTemperatureProfile();
-      renderTemperatureReading();
-      $('temperature-limitations').replaceChildren(...result.limitations.map(text => el('li', { text })));
-      $('temperature-status').textContent = '';
-      $('temperature-result').hidden = false;
+      renderTemperatureResult(result);
       if (restore) {
         selectTemperaturePoint(restore.selectedId);
         setTemperatureMapVisible(restore.mapVisible);
-      } else {
+      } else if (state.workspaceView === 'cooling') {
         setStreetPicking(false);
         setTemperatureMapVisible(true);
         fitToBbox(state.street.bbox);
-        $('temperature-title').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
       }
     } catch (err) {
       if (seq === state.temperature.seq) $('temperature-status').textContent = `Could not compare temperatures: ${err.message}`;
@@ -2049,7 +2461,7 @@
 
   function inspectFlag(reason) {
     $('review-checks').open = true;
-    ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+    revealMap();
     focusSite(reason.siteId, 18, reason.rule.rule_id);
   }
 
@@ -2072,6 +2484,7 @@
   function renderYearReadout() {
     const sc = activeScenario();
     const year = Math.round(state.year);
+    $('growth-summary').textContent = `Tree growth · year ${year}`;
     if (!sc) { ui.readout.replaceChildren(el('span', {}, [document.createTextNode('Year '), strong(String(year)), document.createTextNode(' · no plan yet')])); return; }
     const now = existingCover(sc);
     ui.readout.replaceChildren(
@@ -2173,8 +2586,8 @@
     if (!res) { ui.shadeInfo.textContent = ''; return; }
     const when = String(res.when || '').replace(/^\d{4}-/, '').replace(' local', '');
     ui.shadeInfo.replaceChildren(
-      document.createTextNode(`${when} · sun ${fmt.num(res.sun_elevation_deg, 0)}° · sidewalk `),
-      strong(fmt.pct(res.shaded_sidewalk_pct)), document.createTextNode(' shaded'),
+      document.createTextNode(`${when} · full plan: `),
+      strong(fmt.pct(res.shaded_sidewalk_pct)), document.createTextNode(' of sidewalk shaded'),
     );
   }
 
@@ -2294,6 +2707,8 @@
   }
 
   function focusRestriction(ruleId) {
+    setWorkspaceView('trees');
+    setMobileMap(false);
     ui.rulesCard.hidden = false;
     ui.rulesCard.open = true;
     state.rulesEditorPinned = true;
@@ -2436,6 +2851,7 @@
     setBusy(ui.rulesReset, true);
     try {
       await api('/api/rules/overrides', { method: 'DELETE' });
+      state.ruleOverrides = {};
       await loadRulePack();
       clearError();
       scheduleAutoApply(0);
@@ -2455,6 +2871,7 @@
     let pack = cfg.rule_packs.find((p) => p.id === packId) || cfg.rule_packs[0] || null;
     try {
       const res = await api('/api/rules');
+      state.ruleOverrides = res.overrides || {};
       const fresh = (res.packs || []).find((p) => p.id === packId);
       if (fresh) pack = withOverrides(fresh, res.overrides || {});
     } catch (_) { /* config copy is good enough */ }
@@ -2670,6 +3087,7 @@
       setError(`Agent: ${err.message}`);
     } finally {
       turn.finish();
+      await loadRulePack();
       state.agent.streaming = false;
       renderWorkflow();
       ui.chatInput.focus();
@@ -2730,20 +3148,37 @@
   }
 
   function wireUi() {
+    wireHistory();
+    $('show-passing-locations').addEventListener('click', showPassingLocations);
+    MOBILE_LAYOUT.addEventListener('change', renderPassingControl);
+    $('show-existing-trees').addEventListener('change', event => setLayerVisible('existing_trees', event.target.checked));
+    $('show-new-trees').addEventListener('change', event => {
+      const visible = event.target.checked;
+      setLayerVisible('sites', visible);
+      setLayerVisible('crowns', visible);
+    });
+    $('new-tree-filter').addEventListener('change', event => changeTreeFilter(event.target.value));
+    $('tree-preset').addEventListener('change', event => applyTreePreset(event.target.value));
+    $('trees-view').addEventListener('click', () => setWorkspaceView('trees'));
+    $('mobile-plan').addEventListener('click', () => setMobileMap(false));
+    $('mobile-map').addEventListener('click', () => {
+      revealMap();
+      if (state.temperature.mapVisible && state.temperature.selectedId) {
+        selectTemperaturePoint(state.temperature.selectedId, { focusMap: true, pin: true });
+      } else if (state.street) fitToBbox(state.street.bbox);
+    });
+    $('growth-control').addEventListener('toggle', () => {
+      if (!$('growth-control').open) stopAnimation();
+    });
     $('temperature-form').addEventListener('submit', (event) => { event.preventDefault(); compareTemperature(); });
     $('temperature-form').addEventListener('input', () => { invalidateTemperature(); renderWorkflow(); });
-    $('go-temperature').addEventListener('click', () => {
-      $('temperature-card').open = true;
-      $('temperature-title').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
-      (state.temperature.result ? $('temperature-point') : $('reference-air')).focus({ preventScroll: true });
-    });
-    $('temperature-point').addEventListener('change', (event) => selectTemperaturePoint(event.target.value, { focusMap: true, pin: true }));
+    $('go-temperature').addEventListener('click', openCooling);
     $('temperature-average').addEventListener('click', () => {
       selectTemperaturePoint('');
       if (state.temperature.mapVisible) fitToBbox(state.street.bbox);
     });
     $('temperature-view').addEventListener('click', showCoolingMap);
-    $('temperature-map-close').addEventListener('click', () => setTemperatureMapVisible(false));
+    $('temperature-map-close').addEventListener('click', () => setWorkspaceView('trees'));
     $('temperature-map').addEventListener('click', () => {
       const result = state.temperature.result;
       if (!result || result.scenario_id !== state.activeScenarioId) return;
@@ -2752,7 +3187,7 @@
       state.shade.when = { month: Number($('temperature-month').value), day: Number($('temperature-day').value), hour: Number($('temperature-hour').value) };
       setYear(result.year);
       setShadeEnabled(true);
-      ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+      revealMap();
       fitToBbox(state.street.bbox);
     });
     $('undo-draw').addEventListener('click', () => { state.draw.points.pop(); renderDraw(); });
@@ -2772,18 +3207,22 @@
       const toggle = ui.legendToggles.find(cb => cb.dataset.layer === 'existing_trees');
       if (toggle) toggle.checked = true;
       setLayerVisible('existing_trees', true);
-      ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+      revealMap();
       fitToBbox(state.street && state.street.bbox);
     });
     $('finish-draw').addEventListener('click', finishDraw);
     $('cancel-draw').addEventListener('click', stopDraw);
     $('back-to-plan').addEventListener('click', () => {
+      setWorkspaceView(state.temperature.mapVisible ? 'cooling' : 'trees');
+      setMobileMap(false);
       const target = state.temperature.mapVisible ? $('temperature-card') : state.street ? $('settings-card') : ui.header;
       if (target.tagName === 'DETAILS') target.open = true;
       target.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
-      (state.temperature.mapVisible ? $('temperature-point') : state.street ? ui.spacing : ui.search).focus({ preventScroll: true });
+      (state.temperature.mapVisible ? $('temperature-view') : state.street ? ui.spacing : ui.search).focus({ preventScroll: true });
     });
     ui.gotoTrees.addEventListener('click', () => {
+      setWorkspaceView('trees');
+      setMobileMap(false);
       $('settings-card').scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'start' });
       ui.spacing.focus({ preventScroll: true });
     });
@@ -2795,8 +3234,8 @@
     ui.assistantClose.addEventListener('click', () => toggleAssistant(false));
     ui.fitStreet.addEventListener('click', () => fitToBbox(state.street && state.street.bbox));
     ui.viewPlan.addEventListener('click', () => {
-      setTemperatureMapVisible(false);
-      ui.map.scrollIntoView({ behavior: REDUCED_MOTION.matches ? 'instant' : 'smooth', block: 'center' });
+      setWorkspaceView('trees');
+      revealMap();
       fitToBbox(state.street && state.street.bbox);
       ui.map.focus({ preventScroll: true });
     });
@@ -2814,10 +3253,15 @@
       if (q) loadStreetAndPlan({ city: state.cityId, query: q });
     });
     ui.draw.addEventListener('click', () => (state.draw.active ? stopDraw() : startDraw()));
+    $('choose-on-map').addEventListener('click', () => {
+      if (state.draw.active) stopDraw();
+      setStreetPicking(true);
+      revealMap();
+    });
     $('pick-street').addEventListener('click', () => {
       if (state.draw.active) stopDraw();
       setStreetPicking(!state.pickingStreet);
-      if (state.pickingStreet) ui.map.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (state.pickingStreet) revealMap();
     });
     ui.spacing.addEventListener('input', () => { ui.spacingOut.textContent = `${fmt.num(ui.spacing.value, 1)} m`; });
     ui.species.addEventListener('change', () => {
@@ -2873,6 +3317,7 @@
     addIcons();
     addSources();
     addLayers();
+    for (const cb of ui.legendToggles) setLayerVisible(cb.dataset.layer, cb.checked);
     wireMapEvents();
     updateScale();
     let cfg;
@@ -2894,8 +3339,10 @@
     ui.search.placeholder = `Street name in ${city.name}`;
     renderWorkflow();
     setYear(MAX_YEAR);
+    history.current = workspaceSnapshot();
+    renderHistory();
   }
 
-  window.urbanGreen = { map, state };  // debugging / demo hooks (read-only use)
+  window.urbanGreen = { map, state, history };  // debugging / demo hooks (read-only use)
   boot();
 })();

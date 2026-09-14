@@ -29,12 +29,12 @@ Map selection snaps to an actual OpenStreetMap road within 30 m and creates a pl
 Use **Select street on map** to pick another street. Escape cancels selection;
 at a distant zoom, the first click zooms in.
 Drawing supports **Undo last point**, **Finish drawing** and **Cancel drawing**.
-Follow **Choose a street → Adjust the trees → Review your plan → Compare temperatures**.
+Follow **Choose a street → Show only passing locations → Adjust the trees → Cooling**.
 Expand the street selector to change location. Spacing, street sides, species,
 crown size and planting restrictions apply automatically to the current plan.
 Numeric edits use a short typing pause; switches apply immediately. Edits made
 during an update are queued, and only the latest result is displayed. Use
-**Duplicate plan** before editing to keep a version for comparison. A failed update
+**Your plans → Duplicate current plan** before editing to keep a version for comparison. A failed update
 keeps the last completed map and your edited values, with **Retry update** available.
 The result explains the marker colors: green means no evaluated rule failed,
 amber means a recommendation is not met, and red means a required rule failed.
@@ -48,30 +48,63 @@ editable rules disabled. It checks both distance along the street and trunk
 distance, preventing a wide crossing from pushing a candidate sideways past the
 check. This is a conservative planning default, not a surveyed sight triangle;
 unmapped crossings still need site review. Excluded positions add no canopy,
-shade or cooling. Use the map's
+shade or cooling. Expand the map's **Tree growth** controls for the
 year slider and shade toggle to explore growth, or compare at least two plans for
 the same street and download GeoJSON. The comparison keeps the selected plan and
 up to five recent alternatives, with further metrics under an expandable section.
 API and assistant comparisons label streets and sources and do not rank different
 street contexts against one another.
 
-More planting options, planting rules and map layers expand when needed. Open
-**Ask the planning assistant** for chat. Explanation requests use a read-only
-`inspect_plan` tool, with actions available in an expandable trace. On mobile, **Show this plan on the map**
-and **Back to settings** move between planning and the map. Plans are kept in the
+A prominent **Show only passing locations** button appears above the tree settings.
+It activates the strict filter, opens the map on phones, and zooms to the matching
+locations; **Undo** restores the previous filter and view. On the map, **Only passing**
+and **Show all** switch the visible locations. The map starts with passing locations: new positions where every enabled
+tool check returns true. Failed and unavailable checks both exclude a position
+from this view. **All trees** is the adjacent alternative. **Refine filter**
+offers existing/new toggles and the **Pass every check**, **Need review**,
+**Excluded positions**, and **All new positions** filters. **Need review** also
+includes otherwise green positions with unavailable checks. Disabled checks are
+not evaluated: turning one off can increase the passing count without resolving
+the underlying site constraint. Mandatory safeguards still apply. Passing means
+**pass current checks · site confirmation needed**, not that a tree can definitely
+be planted there; utilities, root space and other unmapped conditions need a site
+assessment.
+
+The main result highlights the passing count. **Plan details** keeps full-plan
+totals secondary, including positions needing review. Filters update markers,
+crowns and displayed tree shade immediately and persist through automatic
+replanning. Cooling estimates and downloads still describe the full plan,
+including review positions; they are not recalculated for the visible subset.
+An explicit inspection of a hidden position reveals it and resets the status
+filter to all positions.
+
+**Undo / Redo** keeps the last 40 workspace actions until the page is refreshed.
+It covers tree parameters, rule edits and resets, filters, street and saved-plan
+selection, growth and shade, cooling, map changes and drawing. **Ctrl/Cmd+Z** undoes
+and **Ctrl/Cmd+Shift+Z** redoes outside text-entry fields; normal text editing keeps
+its own undo behavior. Restoring waits for active requests and replaces the exact
+session rule overrides atomically through `PUT /api/rules/overrides`. If a restore
+fails, its history entry remains available to retry. Downloaded/exported files
+and chat transcripts are not reversed. Disclosures open and close normally.
+
+The main controls are spacing and species; **More options** holds street sides,
+crown size, placement and the plan name. Planting rules and map layers expand
+when needed. Open **Assistant** for chat. Explanation requests use a read-only
+`inspect_plan` tool, with actions available in an expandable trace. On mobile, the persistent **Plan / Map** switch shows one workspace at a time
+and keeps the selected cooling point when returning to the plan. Plans are kept in the
 page until refresh; data sources and estimation warnings remain available under
-the selected street. The existing-tree card shows the actual source and count.
+the data-source disclosure at the bottom of the planner. The existing-tree card shows the actual source and count.
 For Zürich, a cached OSM fallback is retried against the city register once when
 loading a named street. If the register is still unavailable, the fallback stays
 explicit and **Retry Zürich tree register** reloads the same street line and
 creates a new plan. Distance from existing trees is currently a 5 m recommendation,
 so conflicting candidates remain amber rather than being excluded.
 
-**Cooling along the street** compares existing trees with the selected plan.
-Enter a starting air temperature (30°C is an example) and tree age, then choose
-**Calculate cooling**. The result shows before/after air temperature and estimated
+The **Cooling** view compares existing trees with the selected plan in one click,
+using a 30°C example input and year 30 initially. Expand **Edit** to change the
+starting temperature, age or shade date, then choose **Calculate cooling**. The result shows before/after air temperature and estimated
 cooling, initially averaged across sampled sidewalks. Select a colored map point,
-a bar in the street profile, or a location in the selector to inspect local cooling
+a bar under **Compare points along the street**, or a location in the selector to inspect local cooling
 from canopy within 10 m. Both street sides are sampled where sidewalks are mapped.
 The profile previews up to 20 points per side; every sample is available on the map
 and in the selector. Its spacing follows distance along the street, with a fixed
@@ -84,8 +117,9 @@ age and summer date/time; **Back to trees** restores the previous map layers.
 Editing temperature inputs or selecting another saved plan clears the comparison.
 Changing tree settings or restrictions refreshes an already calculated cooling
 comparison automatically, retaining the selected sidewalk point and map mode.
-The main screen keeps tree settings and results visible, with restrictions,
-saved plans, provenance and detailed explanations available in disclosures.
+The **Tree plan** view keeps tree settings and results visible; **Cooling** shows
+only the cooling comparison. Restrictions, saved plans, provenance and detailed
+explanations remain available in disclosures.
 The model transfers a published Tacoma canopy association; it is not calibrated
 for the selected street and is not a local forecast or pavement-temperature model.
 See [temperature method and limitations](docs/temperature-method.md).
@@ -111,6 +145,8 @@ OpenAPI UI: http://localhost:8000/docs.
 | Grow | year slider 0–30 | crowns grow with a species curve; canopy % of corridor, of street space, of sidewalk |
 | Shade | Shade toggle | ground shadow of each crown for 15 July, 15:00 local (editable via API); shaded sidewalk % |
 | Edit a rule | Rules card | change a distance or must/should for your session; re-plan; overrides are labelled |
+| Filter candidates | **Show only passing locations / Show all** | start with new positions passing every enabled check; inspect other positions through the filters |
+| Undo or redo | Header buttons or keyboard shortcuts | restore a previous workspace state, including session rule overrides; last 40 actions until refresh |
 | Compare | Scenarios card | table across scenarios: planted count, 30-year cover, sidewalk under crown |
 | Export | Export GeoJSON | sites with verdicts and rule results, mature crown polygons, the axis |
 
@@ -168,6 +204,7 @@ POST /api/compare                     {scenario_ids: [...]}
 GET  /api/scenarios/{id}              GET /api/scenarios/{id}/sites/{site_id}
 GET  /api/export/{id}.geojson
 GET  /api/rules   PUT /api/rules/{pack}/{rule}   DELETE /api/rules/overrides
+PUT  /api/rules/overrides              atomically replace the complete session override map
 POST /api/agent                       {message} -> text/event-stream (text, tool, result, ui, done, error)
 ```
 

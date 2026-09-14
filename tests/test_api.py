@@ -226,6 +226,42 @@ def test_rule_override_flow(client: TestClient) -> None:
     assert client.get("/api/rules").json()["overrides"] == {}
 
 
+def test_replace_rule_overrides_restores_exact_snapshot(client: TestClient) -> None:
+    baseline = client.get("/api/rules").json()
+    pack_id = baseline["packs"][0]["id"]
+    client.put(f"/api/rules/{pack_id}/carriageway_edge", json={"min_distance_m": 3.0, "enabled": False})
+    saved = client.get("/api/rules").json()
+
+    response = client.put("/api/rules/overrides", json={"existing_tree": {"mode": "should"}})
+    assert response.status_code == 200, response.text
+    changed = response.json()
+    assert changed == client.get("/api/rules").json()
+    assert set(changed["overrides"]) == {"existing_tree"}
+    road = next(rule for rule in changed["packs"][0]["rules"] if rule["id"] == "carriageway_edge")
+    baseline_road = next(rule for rule in baseline["packs"][0]["rules"] if rule["id"] == "carriageway_edge")
+    assert road == baseline_road  # Removed overrides also lose their edited provenance.
+    planned = plan_demo(client)
+    assert planned["rules_used"] == changed["packs"][0]
+    assert planned["params"]["rule_overrides"] == changed["overrides"]
+
+    restored = client.put("/api/rules/overrides", json=saved["overrides"])
+    assert restored.status_code == 200 and restored.json() == saved
+    assert client.get("/api/rules", headers={"X-Session-Id": "other-session-0002"}).json() == baseline
+    cleared = client.put("/api/rules/overrides", json={})
+    assert cleared.status_code == 200 and cleared.json() == baseline
+
+
+@pytest.mark.parametrize(("replacement", "status"), [
+    ({"existing_tree": {"enabled": False}, "no_such_rule": {"enabled": False}}, 404),
+    ({"existing_tree": {"enabled": False}, "carriageway_edge": {"min_distance_m": -1}}, 422),
+])
+def test_invalid_rule_replacement_keeps_previous_state(client: TestClient, replacement: dict, status: int) -> None:
+    initial = client.put("/api/rules/overrides", json={"carriageway_edge": {"min_distance_m": 3.0}}).json()
+    rejected = client.put("/api/rules/overrides", json=replacement)
+    assert rejected.status_code == status, rejected.text
+    assert client.get("/api/rules").json() == initial
+
+
 # ------------------------------------------------------------------ agent
 def test_agent_disabled_without_key(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)

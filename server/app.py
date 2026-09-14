@@ -175,11 +175,29 @@ def export(scenario_id: str) -> JSONResponse:
 
 
 # ------------------------------------------------------------------ rules
+def _rule_state(overrides: dict[str, RuleOverride]) -> dict[str, Any]:
+    packs = [service.rule_pack(pack_id, overrides) for pack_id in service.load_rule_packs()]
+    return {"packs": [pack.model_dump() for pack in packs],
+            "overrides": {rid: ov.model_dump() for rid, ov in overrides.items()}}
+
+
 @app.get("/api/rules")
 def rules(session: Session = Depends(current_session)) -> dict[str, Any]:
-    packs = [service.rule_pack(pack_id, session.rule_overrides) for pack_id in service.load_rule_packs()]
-    return {"packs": [pack.model_dump() for pack in packs],
-            "overrides": {rid: ov.model_dump() for rid, ov in session.rule_overrides.items()}}
+    return _rule_state(dict(session.rule_overrides))
+
+
+@app.put("/api/rules/overrides")
+def replace_overrides(overrides: dict[str, RuleOverride],
+                      session: Session = Depends(current_session)) -> dict[str, Any]:
+    """Restore an exact override snapshot without exposing a partially restored pack."""
+    rule_ids = {rule.id for pack in service.load_rule_packs().values() for rule in pack.rules}
+    unknown = next((rule_id for rule_id in overrides if rule_id not in rule_ids), None)
+    if unknown is not None:
+        raise service.ApiError(404, "unknown_rule", f"Unknown rule '{unknown}'.")
+    replacement = dict(overrides)
+    response = _rule_state(replacement)
+    session.rule_overrides = replacement
+    return response
 
 
 @app.put("/api/rules/{pack_id}/{rule_id}")
